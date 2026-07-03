@@ -28,10 +28,14 @@ if target not in ("win64", "linux"):
 SRC = "src"
 BUILD = "build"
 
-# The M0 corpus: capabilities + the proof kernel. Order is irrelevant to nasm/link,
-# but _start (m0_banner) is the entry.
-UNITS = ["cap_write", "cap_exit", "m0_banner"]
-PROGRAM = "m0_banner"
+# The corpus, one program per milestone. Every program links the mandatory
+# capabilities (DESIGN §4) plus its own units; the unit named after the program
+# provides _start.
+CAPS = ["cap_write", "cap_exit"]
+PROGRAMS = {
+    "m0_banner": ["m0_banner"],                      # M0: prove the seam
+    "m1_abi": ["m1_abi", "m1_fold", "u64_to_dec"],   # M1: prove the ABI stratum
+}
 
 
 # ---------------------------------------------------------------------------------
@@ -149,14 +153,25 @@ else:
     nasm_fmt = "elf64"
     nasm_def = ""
 
-objs = []
-for unit in UNITS:
+all_units = list(CAPS)
+for prog_units in PROGRAMS.values():
+    for u in prog_units:
+        if u not in all_units:
+            all_units.append(u)
+
+obj_of = {}
+for unit in all_units:
     src = os.path.join(SRC, unit + ".asm")
     obj = os.path.join(BUILD, unit + obj_ext)
     # Every interpolated path is quoted, so space-bearing toolchain paths
     # (e.g. "Program Files") are shell-safe. `%s` on nasm_def is "" on linux.
     cmd = '"%s" -f %s %s -I"%s/" -o "$TARGET" "$SOURCE"' % (nasm, nasm_fmt, nasm_def, SRC)
-    objs.append(env.Command(obj, src, cmd)[0])
+    obj_of[unit] = env.Command(obj, src, cmd)[0]
+
+
+def program_objs(prog):
+    """The link set for one program: mandatory capabilities + its own units."""
+    return [obj_of[u] for u in CAPS + PROGRAMS[prog]]
 
 
 # ---------------------------------------------------------------------------------
@@ -172,30 +187,36 @@ if target == "win64":
         print("error: MSVC link.exe not found. Install VS Build Tools with the")
         print("       'VC.Tools.x86.x64' workload, or swap the win64 link block for GoLink.")
         Exit(2)
-    out = os.path.join(BUILD, PROGRAM + ".exe")
     # Every path interpolated below is quoted, so space-bearing SDK/MSVC paths are safe.
     libpaths = " ".join('/LIBPATH:"%s"' % d for d in lib_dirs)
-    obj_args = " ".join('"%s"' % str(o) for o in objs)
-    link_cmd = (
-        '"%s" /nologo /subsystem:console /entry:_start /nodefaultlib '
-        '%s kernel32.lib /out:"$TARGET" %s'
-    ) % (link_exe, libpaths, obj_args)
-    program = env.Command(out, objs, link_cmd)
-    Default(program)
+    programs = []
+    for prog in PROGRAMS:
+        out = os.path.join(BUILD, prog + ".exe")
+        prog_objs = program_objs(prog)
+        obj_args = " ".join('"%s"' % str(o) for o in prog_objs)
+        link_cmd = (
+            '"%s" /nologo /subsystem:console /entry:_start /nodefaultlib '
+            '%s kernel32.lib /out:"$TARGET" %s'
+        ) % (link_exe, libpaths, obj_args)
+        programs.append(env.Command(out, prog_objs, link_cmd)[0])
+    Default(programs)
 else:
     # linux: link with ld if present (Manjaro/Deck); otherwise assembling the objs is
     # still useful as a syntax check and we skip the link step cleanly.
     from shutil import which
     ld = which("ld")
-    out = os.path.join(BUILD, PROGRAM)
     if ld:
-        obj_args = " ".join('"%s"' % str(o) for o in objs)
-        # -z noexecstack: nasm objects carry no .note.GNU-stack section; declare the
-        # stack non-executable explicitly rather than let ld infer (and warn).
-        link_cmd = '"%s" -z noexecstack -o "$TARGET" %s' % (ld, obj_args)
-        program = env.Command(out, objs, link_cmd)
-        Default(program)
+        programs = []
+        for prog in PROGRAMS:
+            out = os.path.join(BUILD, prog)
+            prog_objs = program_objs(prog)
+            obj_args = " ".join('"%s"' % str(o) for o in prog_objs)
+            # -z noexecstack: nasm objects carry no .note.GNU-stack section; declare
+            # the stack non-executable explicitly rather than let ld infer (and warn).
+            link_cmd = '"%s" -z noexecstack -o "$TARGET" %s' % (ld, obj_args)
+            programs.append(env.Command(out, prog_objs, link_cmd)[0])
+        Default(programs)
     else:
         print("note: target=linux but no `ld` on this host — assembling ELF objects only")
         print("      (syntax check). Link on Manjaro/Deck where ld exists.")
-        Default(objs)
+        Default(list(obj_of.values()))
