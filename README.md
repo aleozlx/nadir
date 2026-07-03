@@ -1,6 +1,7 @@
 # nadir
 
-[![CI](https://github.com/aleozlx/nadir/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/aleozlx/nadir/actions/workflows/ci.yml)
+[![linux](https://github.com/aleozlx/nadir/actions/workflows/ci-linux.yml/badge.svg?branch=main)](https://github.com/aleozlx/nadir/actions/workflows/ci-linux.yml)
+[![windows](https://github.com/aleozlx/nadir/actions/workflows/ci-windows.yml/badge.svg?branch=main)](https://github.com/aleozlx/nadir/actions/workflows/ci-windows.yml)
 
 An autological, arch-agnostic asm convention and capability set.
 

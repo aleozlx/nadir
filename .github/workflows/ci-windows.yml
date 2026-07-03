@@ -1,0 +1,36 @@
+name: windows
+
+# The windows leg of the DESIGN §6.2 "same test, both ABIs" gate: assemble
+# win64 COFF, link freestanding with MSVC link.exe (/nodefaultlib, kernel32
+# only), run the PE, assert observable behavior. One workflow per target so
+# each leg carries its own badge.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # choco installs to %ProgramFiles%\NASM, one of the SConstruct's known
+      # candidate paths — no PATH surgery needed.
+      - name: Install nasm
+        run: choco install nasm -y --no-progress
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install scons + pytest
+        run: python -m pip install --upgrade pip scons pytest
+
+      # MSVC link.exe + Windows SDK ship on the runner image; the SConstruct
+      # locates them via vswhere.
+      - name: Build (target=win64)
+        run: python -m SCons target=win64
+
+      - name: Test
+        run: python -m pytest tests -v
