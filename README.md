@@ -20,8 +20,9 @@ src/
   cap_write.asm    capability `write`  (WriteFile+GetStdHandle | syscall 1)
   cap_exit.asm     capability `exit`   (ExitProcess           | syscall 60)
   m0_banner.asm    _start: cap_write(banner) -> cap_exit(0)
-intent/            out-of-band intent bindings (mirrors the intent-map model)
+docs/              design doc, guides, and the tracked intent-map DB (+ .md mirror)
 tests/test_m0.py   behavioral test: build, run, assert stdout + exit code
+scripts/           tooling (intent-map DB backup/dump)
 SConstruct         build spine — flag selects target (DESIGN §8)
 opt/intent-map     pinned submodule: the intent-map tool itself (built in place)
 ```

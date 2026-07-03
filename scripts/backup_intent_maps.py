@@ -11,9 +11,9 @@ Resilience by design: it reads the `bindings` table *directly* with Python's
 bundled sqlite3 — no dependency on the intent-map binary building or running. If
 the tool is what broke, this still works.
 
-The emitted Markdown mirrors intent/nadir.intent.md's shape (label / summary /
-detail per entry), so a dump is both human-readable and a re-load source: each
-entry maps back to `intent-map allocate --label ... --summary ... --detail ...`.
+The emitted Markdown is one section per binding (label / summary / detail), so a
+dump is both human-readable and a re-load source: each entry maps back to
+`intent-map allocate --label ... --summary ... --detail ...`.
 
 Usage:
     python scripts/backup_intent_maps.py                 # dump every docs/*.intent.db

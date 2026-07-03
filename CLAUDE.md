@@ -91,6 +91,13 @@ tool binary), so it still works if the tool itself is what broke. Commit the
 `.md` alongside the `.db`; the `.md` is the human-readable, tool-independent
 safety net and doubles as a re-load source.
 
+The DB is canonical — there is no prose source file behind it (the old
+`intent/nadir.intent.md` was retired once the DB became the store). The `.md`
+mirror is a **safety net, generated on demand**, kept while we build confidence
+in the tool through use; once the tool has proven durable, the mirrors can be
+dropped or generated only at release. Regenerate before committing a DB change so
+the mirror never lags the binary.
+
 ### Why the tool is pinned
 
 A generated intent-map DB is only readable by a compatible tool version (schema +
@@ -152,7 +159,6 @@ don't trust the exit code.
 
 ```
 src/               canonical asm — the artifact (nadir.inc + capabilities + kernel)
-intent/            prose intent bindings (source of the DB; human-authored)
 docs/              design doc, guides, and the tracked intent DB + its .md mirror
 tests/             behavioral tests (build, run, assert observable behavior)
 scripts/           tooling (intent-map backup/dump)
