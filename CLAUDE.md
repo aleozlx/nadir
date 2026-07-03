@@ -10,9 +10,11 @@ and instrumentation are out-of-band projections onto it (DESIGN §1). One logica
 concept, two hand-written realizations (win64 `kernel32` / linux `syscall`),
 selected by a build flag — no compiler, no CRT, no libc. nadir owns `_start`.
 
-Current milestone: **M0 — "prove the seam"** (DESIGN §7.1), complete: `exit` +
-`write` capabilities, freestanding binary prints a banner and exits 0, tested on
-both ABIs via CI.
+Current milestone: **M1 — "prove the ABI stratum"** (DESIGN §7.2), complete:
+`m1_fold`, a non-leaf 4-arg kernel (arg3/arg4 divergence + callee-saved
+discipline, both realizations), behaviorally pinned by an asymmetric fold and a
+register canary; the `abi:*` concept keys document the correspondence. Next up:
+**M2 — `open-window` round-trip** (DESIGN §7.3).
 
 ## The intent-map workflow (how documentation works here)
 
