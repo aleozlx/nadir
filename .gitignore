@@ -1,0 +1,28 @@
+# Vendored tooling (DESIGN §8) — cloned into var/, not part of the nadir corpus.
+var/
+
+# Build artifacts (scons spine emits into build/).
+build/
+*.obj
+*.o
+*.exe
+*.lst
+*.map
+
+# MSVC link incrementals / debug info.
+*.ilk
+*.pdb
+
+# scons bookkeeping.
+.sconsign.dblite
+.sconf_temp/
+
+# intent-map DB, if one is ever created at repo root.
+intent-map.db
+*.db-wal
+*.db-shm
+
+# Python.
+__pycache__/
+*.pyc
+.pytest_cache/
