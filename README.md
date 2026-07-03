@@ -23,8 +23,10 @@ src/
 intent/            out-of-band intent bindings (mirrors the intent-map model)
 tests/test_m0.py   behavioral test: build, run, assert stdout + exit code
 SConstruct         build spine — flag selects target (DESIGN §8)
-var/               vendored tooling (git-ignored): intent-map
+opt/intent-map     pinned submodule: the intent-map tool itself (built in place)
 ```
+
+`var/` stays git-ignored, reserved for generated/scratch artifacts.
 
 ### Build & run
 
@@ -32,6 +34,7 @@ Requires: `nasm`, `scons` (`pip install scons`), and a linker for your target
 (win64: MSVC `link.exe` from VS Build Tools; linux: `ld`).
 
 ```sh
+git submodule update --init    # fetch opt/intent-map at its pinned commit
 scons                 # host target (win64 on Windows, linux elsewhere)
 scons target=linux    # cross-author: assembles ELF; links where `ld` exists
 scons -c              # clean
@@ -43,6 +46,10 @@ python -m pytest tests/test_m0.py -v   # behavioral test (seeds the M3a harness)
 ```
 
 If `scons` is not on PATH, use `python -m SCons` (the pip package installs the module).
+
+`opt/intent-map` is pinned rather than freely updated because a generated intent-map
+database is only readable by a compatible tool version (schema + wire grammar) — pinning
+the tool as a submodule SHA keeps that pairing reproducible from a nadir checkout.
 
 ### Verified (win64)
 

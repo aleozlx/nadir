@@ -3,7 +3,7 @@
 The canonical `.asm` is the artifact; **intent is an out-of-band projection onto it**
 (DESIGN §1, §6). This file is that projection captured in prose *now*, at M0, before
 the `intent-map` DB is stood up (its C build needs a C compiler + libsqlite3/FTS5 —
-deferred, pull-based, DESIGN §4/§9). The vendored tool lives at `var/intent-map/`.
+deferred, pull-based, DESIGN §4/§9). The vendored tool lives at `opt/intent-map/` (submodule, pinned).
 
 Each binding below is written to `intent-map`'s model so loading is mechanical later:
 a stable opaque **key** (`<file>:<symbol>`, the convention its `view` verb reads), a
