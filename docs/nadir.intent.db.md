@@ -75,10 +75,10 @@ DESIGN §7.1 "prove the seam." Freestanding entry (no CRT; nadir owns _start). C
 **detail:**
 
 ```text
-win64 → rcx; sysv/linux → rdi.
+win64 → rcx; sysv/linux → rdi. Lineage: rcx continues 32-bit __fastcall (arg1 in ecx); rdi is the string-op destination register (rep movs/stos hardwire rdi=dst), so copy/fill-shaped functions receive arg1 pre-staged. See docs/abi-lineage.md.
 ```
 
-<sub>ordinal 5 · created 2026-07-03T09:56:32.432Z · modified 2026-07-03T09:56:32.432Z · status active</sub>
+<sub>ordinal 5 · created 2026-07-03T09:56:32.432Z · modified 2026-07-03T10:46:07.635Z · status active</sub>
 
 ---
 
@@ -89,10 +89,10 @@ win64 → rcx; sysv/linux → rdi.
 **detail:**
 
 ```text
-win64 → rdx; sysv/linux → rsi.
+win64 → rdx; sysv/linux → rsi. Lineage: rdx continues 32-bit __fastcall (arg2 in edx); rsi is the string-op source register (rep movs hardwires rsi=src). See docs/abi-lineage.md.
 ```
 
-<sub>ordinal 6 · created 2026-07-03T09:56:32.479Z · modified 2026-07-03T09:56:32.479Z · status active</sub>
+<sub>ordinal 6 · created 2026-07-03T09:56:32.479Z · modified 2026-07-03T10:46:07.691Z · status active</sub>
 
 ---
 
@@ -131,10 +131,10 @@ number in RAX; args RDI, RSI, RDX, R10, R8, R9. The syscall insn clobbers RCX (r
 **detail:**
 
 ```text
-win64 → r8; sysv/linux → rdx.
+win64 → r8; sysv/linux → rdx. Lineage: win64 extends the fastcall pair into the REX registers; sysv keeps filling its measured six-register file — the rdx overlap with win64's arg2 is pure collision. See docs/abi-lineage.md.
 ```
 
-<sub>ordinal 9 · created 2026-07-03T10:20:50.036Z · modified 2026-07-03T10:20:50.036Z · status active</sub>
+<sub>ordinal 9 · created 2026-07-03T10:20:50.036Z · modified 2026-07-03T10:46:07.746Z · status active</sub>
 
 ---
 
@@ -145,10 +145,10 @@ win64 → r8; sysv/linux → rdx.
 **detail:**
 
 ```text
-win64 → r9; sysv/linux → rcx. Note the collision: SysV arg4 lands in the register Win64 uses for arg1, so a body written to the wrong convention still assembles and runs — only behavior betrays it. For raw Linux syscalls arg4 is R10 instead (see abi:syscall-args); rcx applies to the *function-call* convention.
+win64 → r9; sysv/linux → rcx. Note the collision: SysV arg4 lands in the register Win64 uses for arg1, so a body written to the wrong convention still assembles and runs — only behavior betrays it. For raw Linux syscalls arg4 is R10 instead (see abi:syscall-args); rcx applies to the *function-call* convention. Lineage: the r10 substitution is the one hardware-forced cell in the whole table — the syscall insn hardwires rcx←rip, r11←rflags — and Windows makes the same move privately (every ntdll stub is mov r10, rcx; syscall). See docs/abi-lineage.md.
 ```
 
-<sub>ordinal 10 · created 2026-07-03T10:20:50.091Z · modified 2026-07-03T10:20:50.091Z · status active</sub>
+<sub>ordinal 10 · created 2026-07-03T10:20:50.091Z · modified 2026-07-03T10:46:07.801Z · status active</sub>
 
 ---
 
@@ -159,10 +159,10 @@ win64 → r9; sysv/linux → rcx. Note the collision: SysV arg4 lands in the reg
 **detail:**
 
 ```text
-win64 → rbx, rbp, rsp, rsi, rdi, r12–r15, xmm6–15; sysv/linux → rbx, rbp, rsp, r12–r15 (rsi/rdi are ARGUMENT registers there, xmm all volatile). The intersection — rbx, rbp, r12–r15 — is the only set that reads identically in both realizations, which is why m1_fold carries a..d and its result in r12–r15: one register choice, two ABIs, zero %ifdef in the stash logic. Preservation is by push/pop in the prologue/epilogue.
+win64 → rbx, rbp, rsp, rsi, rdi, r12–r15, xmm6–15; sysv/linux → rbx, rbp, rsp, r12–r15 (rsi/rdi are ARGUMENT registers there, xmm all volatile). The intersection — rbx, rbp, r12–r15 — is the only set that reads identically in both realizations, which is why m1_fold carries a..d and its result in r12–r15: one register choice, two ABIs, zero %ifdef in the stash logic. Preservation is by push/pop in the prologue/epilogue. Lineage: win64's larger set is continuity with x86-32 Windows (esi/edi were callee-saved there); sysv freed rsi/rdi to serve as arg1/arg2 and left all xmm volatile for cheap vector leaves. See docs/abi-lineage.md.
 ```
 
-<sub>ordinal 11 · created 2026-07-03T10:20:50.148Z · modified 2026-07-03T10:20:50.148Z · status active</sub>
+<sub>ordinal 11 · created 2026-07-03T10:20:50.148Z · modified 2026-07-03T10:46:07.858Z · status active</sub>
 
 ---
 
