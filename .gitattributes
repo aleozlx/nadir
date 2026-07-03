@@ -1,0 +1,4 @@
+# The tracked intent-map DBs are binary SQLite files (documentation mechanism).
+# Mark them binary so git never applies text/EOL normalization, which would
+# corrupt the file on checkout across platforms. Their .md mirrors stay text.
+*.db binary

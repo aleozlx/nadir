@@ -1,0 +1,34 @@
+name: linux
+
+# The linux leg of the DESIGN §6.2 "same test, both ABIs" gate: assemble ELF64,
+# link with ld, run the freestanding binary, assert observable behavior.
+# One workflow per target so each leg carries its own badge — a red badge names
+# the realization that diverged.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install nasm
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends nasm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install scons + pytest
+        run: python -m pip install --upgrade pip scons pytest
+
+      - name: Build (target=linux)
+        run: python -m SCons target=linux
+
+      - name: Test
+        run: python -m pytest tests -v

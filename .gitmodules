@@ -1,0 +1,3 @@
+[submodule "opt/intent-map"]
+	path = opt/intent-map
+	url = https://github.com/aleozlx/intent-map
