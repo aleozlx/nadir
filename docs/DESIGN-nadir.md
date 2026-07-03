@@ -3,7 +3,7 @@
 *An autological, arch-agnostic asm convention and capability set. Canonical asm; intent
 and instrumentation as out-of-band projections.*
 
-Status: draft v0.2 · asm-canonical · companion to `intent-map`
+Status: draft v0.3 · asm-canonical · companion to `intent-map`
 
 ---
 
@@ -48,32 +48,60 @@ ISA with different ABIs; `mov rcx, …` assembles identically, but whether RCX i
 (Win64) or arg4 (SysV) is a semantic fact NASM knows nothing about. Code stratifies by
 how target-dependent each region is.
 
-### 2.1 Portable stratum — pure computation
-Leaf logic touching only registers and stack: no calls, no syscalls. Arithmetic inner
-loops, morphology kernels. Genuinely ISA-syntax-portable *today* — one `.asm`, both
-targets, no flag. A function of nothing target-related.
+### 2.1 Portable stratum — everything above the seam
+Code that speaks only the nadir call convention (§2.2): pure computation *and* any
+non-leaf logic whose calls stay inside the corpus. One `.asm`, both targets, no flag.
+(v0.2 limited this stratum to leaf logic — no calls — because callers had to know the
+target's arg registers. The internal convention removed that limit; see §2.2.)
 
-### 2.2 ABI stratum — two realizations, flag-selected
+### 2.2 ABI stratum — one internal convention, translated at the seam
 Win64 and SysV differ in convention: arg registers, mandatory shadow space, the
 callee-saved set (SysV also saves RSI/RDI; Win64 also saves xmm6–15). nadir does **not**
-resolve roles dynamically — it keeps **two hand-written versions** (`%ifdef WIN64`
-branches, or paired files) and the build flag picks.
+resolve roles dynamically, and it does not skin two conventions under `%define` roles —
+a macro layer makes the source *look* uniform while the collision graph, frame
+discipline, and callee-saved sets still diverge underneath (see
+[abi-lineage.md](abi-lineage.md) for the collision map). Instead, nadir-to-nadir calls
+use **one static convention, real registers, both targets**, and the capability
+realizations — already two hand-written bodies (§2.3) — translate at the seam:
+
+| rule | choice | why |
+|---|---|---|
+| args | `rdi, rsi, rdx, rcx` (arg5+ pull-based) | SysV roles: syscall marshalling near-zero; lineage in [abi-lineage.md](abi-lineage.md) |
+| return | `rax` | shared by both targets already |
+| callee-saved | `rbx, rbp, r12–r15` | the win64∩sysv intersection — both OS boundaries preserve it for free |
+| volatile | everything else, incl. all xmm | the win64∪sysv union |
+| alignment | `rsp ≡ 0 (mod 16)` at every call | needed transitively for kernel32; free on linux |
+| shadow space / red zone | none | Win64 duties live inside `cap_*` win64 bodies, next to the calls that need them |
+
+The bijection thesis (§1) survives because the convention is *singular and literal*:
+`mov rdi, rax` in the source is `mov rdi, rax` in the silicon, and a reader verifies
+any body against one register-role map, not two. The target ABIs don't vanish — they
+concentrate where they are irreducible: inside the seam (kernel32's rules, `syscall`'s
+rules) and at OS→nadir entries (`_start` normalizes loader alignment; future callbacks
+like `WndProc` are OS-stratum shims, §5.2). *Eine Zunge im Haus, zwei Dolmetscher an
+der Tür.*
 
 intent-map's job here is *documentation of invariant knowledge*, not codegen: the
-concept `arg1` is one immutable key whose detail records "→ rcx on win64, rdi on sysv."
-The agent reads this to stay coherent across both realizations; the correspondence lives
-in the binding, not in any resolver.
+concept `arg1` is one immutable key whose detail records "→ rcx on win64, rdi on sysv"
+— facts consumed *inside* the seam translations. The `abi:nadir-call` binding records
+the internal convention itself.
 
-| concept key | win64 detail | sysv detail |
-|---|---|---|
-| `arg1` | `rcx` | `rdi` |
-| `arg2` | `rdx` | `rsi` |
-| `shadow-space` | `sub rsp, 32` before any call | *(none)* |
-| `callee-saved+` | `rsi, rdi, xmm6–15` | *(base only)* |
+| concept key | win64 detail | sysv detail | nadir |
+|---|---|---|---|
+| `arg1` | `rcx` | `rdi` | `rdi` |
+| `arg2` | `rdx` | `rsi` | `rsi` |
+| `shadow-space` | `sub rsp, 32` before any call | *(none)* | inside `cap_*` win64 only |
+| `callee-saved+` | `rsi, rdi, xmm6–15` | *(base only)* | *(base only)* |
 
 **Shared concept keys, per-target detail** — truer to intent-map's key↔concept model
 than splitting `f_win64:arg1` / `f_sysv:arg1`. The key *is* the logical argument; the
-two register facts are properties of it. The agent sees the correspondence.
+register facts are properties of it. The agent sees the correspondence.
+
+**Lineage of this decision:** v0.2 kept two hand-written realizations of every non-leaf
+function; M1 built exactly that, and the reconcile loop surfaced the better absorption
+point — the diff belongs in the `cap_*` bodies, which are per-target anyway. The
+two-realization discipline now applies where it is irreducible (the seam), and the
+behavioral tests (§6.2) still pin both realizations to one contract.
 
 ### 2.3 OS stratum — capability dispatch (a seam, not a layer)
 Irreducibly divergent: `WriteFile`+`kernel32` vs `write` syscall, PE vs ELF. Intent
@@ -83,9 +111,11 @@ names the *capability*; the flag picks a hand-written implementation:
 stdout-write → { win64: WriteFile-via-kernel32, linux: syscall-write }
 ```
 
-A lookup keyed by target, not a transform of it. Keep the parameterized-by-convention
-ABI stratum mechanically distinct from the swapped OS stratum — conflating them is where
-arch-agnostic layers rot.
+A lookup keyed by target, not a transform of it. The seam absorbs **both** kinds of
+divergence: mechanism (WriteFile vs `syscall`) and convention (each `cap_*` body
+receives nadir args and owns its target's call duties — marshalling, shadow space,
+`rcx→r10`). Keep that seam mechanically distinct from the portable code above it —
+conflating the strata is where arch-agnostic layers rot.
 
 ---
 
@@ -158,7 +188,10 @@ connect. Fine for a dev toy (desktop mode has it); known edge.
 
 ### 5.2 Where the wrapper stops — the primitive tier
 Wrap at the primitive tier (`open-window`/`blit`/`close`); keep the **event loop per-OS
-and explicit**. X11 is retained-connection + protocol stream + you drive the loop by
+and explicit**. Note the convention boundary this creates: anything the OS calls *into*
+(Win32's `WndProc` is the first) arrives in the *target's* convention and must shim
+into the nadir convention (§2.2) before touching portable code — the same duty `_start`
+already performs for loader entry. Those shims are OS-stratum code by definition. X11 is retained-connection + protocol stream + you drive the loop by
 reading the socket; Win32 is call-based + OS-owned queue + `WndProc` callback — the
 *shapes* differ, not just the calls. A synthetic uniform event model costs more than two
 honest loops at our corpus size. The waist stays narrow; the leak stays outside it.
@@ -274,6 +307,10 @@ die Prüfung kommt und geht.*
    thesis holds.
 2. **M1 — prove the ABI stratum.** One non-leaf kernel, 4+ args, callee-saved
    preservation, both realizations; shared concept keys documenting the correspondence.
+   *(Built as specified in v0.2 — two hand-written kernel bodies — then revised: the
+   experience surfaced the internal call convention (§2.2), the seam absorbed the
+   ABI, and the kernel collapsed to one body. The behavioral tests pinned the
+   refactor: same stdout, same exit codes, both targets.)*
 3. **M2 — `open-window` round-trip.** Blank window, no events: Win32
    (`RegisterClass`+`CreateWindowEx`) vs X11 (`socket`+handshake+`CreateWindow`+
    `MapWindow` via XWayland) under one intent. Locates where portability should stop.
@@ -348,6 +385,10 @@ der Reiz.*
 - **Shim ABI discipline.** The injected shim must be *more* ABI-disciplined than the code
   under test — a shim that clobbers a callee-saved reg masks or invents bugs. One
   reusable, audited shim macro, not hand-rolled per label.
+- **nadir-call convention gaps.** arg5+, xmm/vector args, and varargs are undefined
+  until a capability needs them — extend pull-based, and record each extension in the
+  `abi:nadir-call` binding. Interop with externally-called code (OS callbacks) always
+  goes through an OS-stratum shim, never by bending the internal convention.
 - **GUI event-model leak.** Per-OS loops are right at toy scale; revisit only if a real
   program needs uniform event handling across both targets.
 - **intent-map recall gap.** FTS5 keyword OR-matching misses semantic recall

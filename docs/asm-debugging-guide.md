@@ -11,6 +11,15 @@ paper over it and no sanitizer to flag it, so the arithmetic below is the only c
 Companion to [DESIGN-nadir.md](DESIGN-nadir.md) §2.2 (ABI stratum). Linux/SysV has its own
 failure modes; this file is Win64-only.
 
+**Where these duties live after v0.3:** under the nadir call convention
+(DESIGN §2.2), only `cap_*` win64 realizations call Win64 code, so the
+shadow-space invariant (#2) applies inside those bodies alone. The alignment
+invariant (#1) became nadir-universal — the convention requires `rsp ≡ 0 (mod 16)`
+at *every* call, both targets — so the `rsp mod 16` walk below now applies to all
+nadir code, and `_start` normalizes loader entry with `and rsp, -16`. The bugs
+documented here are the M0-era code as originally written; the arithmetic is
+unchanged and still the only check.
+
 ---
 
 ## The two invariants everything reduces to
