@@ -198,7 +198,7 @@ if target == "win64":
             '"%s" /nologo /subsystem:console /entry:_start /nodefaultlib '
             '%s kernel32.lib /out:"$TARGET" %s'
         ) % (link_exe, libpaths, obj_args)
-        programs.append(env.Command(out, prog_objs, link_cmd))
+        programs.append(env.Command(out, prog_objs, link_cmd)[0])
     Default(programs)
 else:
     # linux: link with ld if present (Manjaro/Deck); otherwise assembling the objs is
@@ -214,7 +214,7 @@ else:
             # -z noexecstack: nasm objects carry no .note.GNU-stack section; declare
             # the stack non-executable explicitly rather than let ld infer (and warn).
             link_cmd = '"%s" -z noexecstack -o "$TARGET" %s' % (ld, obj_args)
-            programs.append(env.Command(out, prog_objs, link_cmd))
+            programs.append(env.Command(out, prog_objs, link_cmd)[0])
         Default(programs)
     else:
         print("note: target=linux but no `ld` on this host — assembling ELF objects only")
