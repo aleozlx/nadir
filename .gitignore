@@ -17,7 +17,9 @@ build/
 .sconsign.dblite
 .sconf_temp/
 
-# intent-map DB, if one is ever created at repo root.
+# intent-map DBs: the tracked, canonical ones live in docs/ (documentation
+# mechanism — committed, versioned alongside the source they annotate). Working
+# copies elsewhere (repo root, var/) and SQLite's transient WAL/SHM sidecars are not.
 intent-map.db
 *.db-wal
 *.db-shm
