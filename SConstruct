@@ -77,12 +77,24 @@ def _vswhere():
         return None
 
 
+def _version_key(path):
+    """Sort key that orders dotted version dir names numerically, not lexically.
+
+    Plain string sort misorders versions of unequal digit-width (e.g. "10.0.9999.0"
+    would sort *after* "10.0.10240.0" because '9' > '1'). Split each name into digit /
+    non-digit runs and compare digit runs as ints so 10240 > 9999.
+    """
+    import re
+    return [int(t) if t.isdigit() else t
+            for t in re.split(r"(\d+)", os.path.basename(path))]
+
+
 def _newest_subdir(path):
     if not os.path.isdir(path):
         return None
     subs = [os.path.join(path, d) for d in os.listdir(path)]
     subs = [d for d in subs if os.path.isdir(d)]
-    return sorted(subs)[-1] if subs else None
+    return sorted(subs, key=_version_key)[-1] if subs else None
 
 
 def find_msvc_link():
@@ -141,6 +153,8 @@ objs = []
 for unit in UNITS:
     src = os.path.join(SRC, unit + ".asm")
     obj = os.path.join(BUILD, unit + obj_ext)
+    # Every interpolated path is quoted, so space-bearing toolchain paths
+    # (e.g. "Program Files") are shell-safe. `%s` on nasm_def is "" on linux.
     cmd = '"%s" -f %s %s -I"%s/" -o "$TARGET" "$SOURCE"' % (nasm, nasm_fmt, nasm_def, SRC)
     objs.append(env.Command(obj, src, cmd)[0])
 
@@ -159,6 +173,7 @@ if target == "win64":
         print("       'VC.Tools.x86.x64' workload, or swap the win64 link block for GoLink.")
         Exit(2)
     out = os.path.join(BUILD, PROGRAM + ".exe")
+    # Every path interpolated below is quoted, so space-bearing SDK/MSVC paths are safe.
     libpaths = " ".join('/LIBPATH:"%s"' % d for d in lib_dirs)
     obj_args = " ".join('"%s"' % str(o) for o in objs)
     link_cmd = (

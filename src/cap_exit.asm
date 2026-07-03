@@ -18,8 +18,11 @@ global cap_exit
 ; bookkeeping to unwind — we align rsp and call.
 section .text
 cap_exit:
-    ; rcx already holds the code. Give the call its shadow space and go.
-    SHADOW_ALLOC
+    ; rcx already holds the code. On entry rsp is 16-aligned+8 (the caller's `call`
+    ; pushed the return address). Win64 requires rsp 16-aligned *at* the call, so we
+    ; can't use a bare 32-byte SHADOW_ALLOC (32 is a 16-multiple → leaves the +8 skew).
+    ; Reserve 32 shadow + 8 realignment = 40, which both aligns and homes the args.
+    sub     rsp, 40
     call    ExitProcess
     ; unreached
     hlt                         ; @ret cap_exit  (belt-and-suspenders trap if it returns)

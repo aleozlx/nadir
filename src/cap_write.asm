@@ -32,10 +32,15 @@ cap_write:
     ; Preserve incoming args across the GetStdHandle call (which clobbers rcx/rdx).
     mov     rsi, rcx            ; rsi = buf
     mov     rdi, rdx            ; rdi = len
-    ; Reserve locals: 8 bytes for the "bytes written" DWORD (kept 8 for alignment).
-    ; Frame must leave rsp 16-aligned at the inner call sites. After push rbp/rsi/rdi
-    ; (3 pushes) rsp is 16-aligned; subtract a 16-multiple to stay aligned.
-    sub     rsp, 16             ; [rsp+0] = lpNumberOfBytesWritten (DWORD)
+    ; Reserve locals: keep the "bytes written" DWORD in its OWN slot, distinct from
+    ; WriteFile's stacked arg5. Frame must leave rsp 16-aligned at the inner call sites.
+    ; After push rbp/rsi/rdi (3 pushes) rsp is 16-aligned; subtract a 16-multiple to
+    ; stay aligned. The DWORD lives at [rsp+8]; [rsp+0] is padding.
+    ;
+    ; Why [rsp+8] and not [rsp+0]: SHADOW_ALLOC below does `sub rsp,32`, so the stacked
+    ; arg5 lands at [rsp+32] == the pre-SHADOW [rsp+0]. Parking the &written DWORD at
+    ; [rsp+8] keeps the output slot from aliasing the arg5 input slot.
+    sub     rsp, 16             ; [rsp+8] = lpNumberOfBytesWritten (DWORD); [rsp+0] pad
 
     ; --- h = GetStdHandle(STD_OUTPUT_HANDLE) ---
     mov     ecx, STD_OUTPUT_HANDLE
@@ -48,13 +53,20 @@ cap_write:
     mov     rcx, rax            ; arg1 hFile        = handle
     mov     rdx, rsi            ; arg2 lpBuffer     = buf
     mov     r8,  rdi            ; arg3 nNumberOfBytesToWrite = len
-    lea     r9,  [rsp]          ; arg4 lpNumberOfBytesWritten = &written
+    lea     r9,  [rsp+8]        ; arg4 lpNumberOfBytesWritten = &written
     SHADOW_ALLOC                ; 32B shadow; arg5 sits just above it at [rsp+32]
-    mov     qword [rsp+32], 0   ; arg5 lpOverlapped = NULL
+    mov     qword [rsp+32], 0   ; arg5 lpOverlapped = NULL  (distinct slot from &written)
     call    WriteFile
     SHADOW_FREE
-    ; rax = BOOL (nonzero on success). Return bytes actually written for the caller.
-    mov     eax, dword [rsp]    ; rax = written (zero-extended)
+    ; rax = BOOL: 0 == failure. Honor the contract (out: rax<0 on failure) instead of
+    ; returning a stale/garbage byte count.
+    test    eax, eax
+    jz      .fail
+    mov     eax, dword [rsp+8]  ; rax = written (zero-extended)
+    jmp     .done
+.fail:
+    mov     eax, -1             ; contract: negative on failure
+.done:
 
     add     rsp, 16
     pop     rdi

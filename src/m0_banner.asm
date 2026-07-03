@@ -24,6 +24,11 @@ section .text
 _start:
 %ifdef WIN64
     ; --- win64: arg1=rcx, arg2=rdx (§2.2) ---
+    ; The loader enters _start with rsp 16-aligned+8 (as if `call`ed). Win64 requires
+    ; 32 bytes of shadow space and rsp 16-aligned at every call. Reserve 40 once
+    ; (32 shadow + 8 realign) and keep it for the whole kernel — cap_exit never returns,
+    ; so this frame is never unwound.
+    sub     rsp, 40
     lea     rcx, [rel banner]       ; arg1 = buffer
     mov     rdx, banner_len         ; arg2 = length
     call    cap_write
