@@ -49,3 +49,6 @@ If `scons` is not on PATH, use `python -m SCons` (the pip package installs the m
 The linked exe imports **only** `KERNEL32.dll` (`WriteFile`, `ExitProcess`,
 `GetStdHandle`) — no CRT — with a custom `_start` entry, ~2.5 KB. The linux leg
 assembles to ELF64 and links with `ld` on Manjaro/Steam Deck.
+
+Win64 stack-discipline lessons (alignment + shadow space) from building this kernel are
+in [docs/asm-debugging-guide.md](docs/asm-debugging-guide.md).
