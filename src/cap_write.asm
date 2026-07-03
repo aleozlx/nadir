@@ -53,7 +53,8 @@ cap_write:
     mov     eax, dword [rsp+8]  ; rax = written (zero-extended)
     jmp     .done
 .fail:
-    mov     eax, -1             ; contract: negative on failure
+    mov     rax, -1             ; contract: negative on failure — full-width, because
+                                ; `mov eax, -1` zero-extends to +4294967295 in rax
 .done:
     add     rsp, 24
     ret                         ; @ret cap_write

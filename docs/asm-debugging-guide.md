@@ -179,12 +179,19 @@ Now `&written` is at old `[rsp+8]` and arg 5 is at old `[rsp+0]` — different s
   ```asm
       test    eax, eax
       jz      .fail
-      mov     eax, dword [rsp+8]   ; success: bytes written
+      mov     eax, dword [rsp+8]   ; success: bytes written (zero-extend is right here)
       jmp     .done
   .fail:
-      mov     eax, -1
+      mov     rax, -1              ; failure: FULL-WIDTH, see below
   .done:
   ```
+
+  And mind the width on that failure sentinel: `mov eax, -1` zero-extends, leaving
+  `rax = 0x00000000FFFFFFFF` — *positive* 4294967295 to any 64-bit signed check, so
+  a caller testing `rax < 0` reads the failure as a ~4GB success. The 32-bit write
+  is correct for the success path (the byte count is a DWORD, ≥ 0) and wrong for
+  the sentinel — same instruction, opposite verdicts, chosen by width. (This one
+  was bug 4: it survived M0 review and was caught by review on PR #4.)
 
 ---
 
