@@ -175,6 +175,15 @@ Win32 and Linux share **zero mechanism**:
 Duals in *spirit* (produce a window), disjoint in *mechanism* — the OS-stratum
 lookup-table in its purest form.
 
+GUI splits into two tracks (full treatment in
+[DESIGN-nadir-gui.md](DESIGN-nadir-gui.md)): the **primitive track** — this section:
+`open-window`/`blit`/`close` as capabilities, the honest seam proof, M2 — and a
+**host-tool track** (`nadir_ig`, nadir's Dear ImGui binding: Dear ImGui behind a
+narrow C ABI) for assembly
+workbenches. The tool track lives *outside* the freestanding waist — it may link libc
+and a renderer — and is tooling convention, not capability-table content. §5.1–5.2
+below concern the primitive track only.
+
 ### 5.1 X11 over Wayland on the Linux side
 Manjaro / Steam Deck default to Wayland. **Wayland-from-asm** needs `wl_registry`,
 `wl_compositor`+`wl_shm`, `memfd_create`+`mmap`, xdg-shell handshake — ~5 protocol
@@ -314,6 +323,8 @@ die Prüfung kommt und geht.*
 3. **M2 — `open-window` round-trip.** Blank window, no events: Win32
    (`RegisterClass`+`CreateWindowEx`) vs X11 (`socket`+handshake+`CreateWindow`+
    `MapWindow` via XWayland) under one intent. Locates where portability should stop.
+   *(The host-tool GUI track G0–G5 in [DESIGN-nadir-gui.md](DESIGN-nadir-gui.md) runs
+   parallel to this roadmap and gates nothing here.)*
 4. **M3a — behavioral tests.** Same test, both ABIs, on the existing
    `test_zero_runner.py`/pytest harness; only delta is loading PE vs ELF. Gates on
    nothing heavier — do this before building any injector.
