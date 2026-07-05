@@ -113,7 +113,7 @@ The original M2 proof should stay small:
 This track answers: "Where does the OS seam actually live?" It is not expected to become
 the main UI for nadir tools.
 
-### 4.2 `asmgui` becomes the usable tool layer
+### 4.2 `imgui` becomes the usable tool layer
 
 The tool layer exists for assembly workbenches:
 
@@ -132,8 +132,8 @@ handles unless a real tool forces them.
 
 ```
 asm tool
-  calls asmgui_* functions
-asmgui.dll / libasmgui.so
+  calls imgui_* functions
+imgui.dll / libimgui.so
   owns Dear ImGui context and backend
 backend row
   win64: Win32 + D3D11, or Win32 + OpenGL
@@ -148,34 +148,44 @@ The first backend should be boring rather than pure. Boring is how the tool gets
 
 The wrapper is a capability table for GUI tools, not a binding of all Dear ImGui.
 
+**Naming.** The wrapper is named for what it honestly is — an immediate-mode GUI
+surface — and the `imgui_` prefix is collision-free: Dear ImGui core is C++ (all
+symbols namespace-mangled), cimgui uses the `ig` prefix, and the official backends use
+`ImGui_Impl*`; nothing in that ecosystem exports lowercase `imgui_*` C symbols. The one
+collision to watch is the *artifact* name, not the symbols: `imgui.lib`/`libimgui.a` is
+what vcpkg and distro packages typically call their Dear ImGui builds, and the wrapper
+already links Dear ImGui statically inside itself. If a linker search path ever picks
+up the wrong `imgui`, rename the artifact only (e.g. `nadir_imgui.dll`); the asm-facing
+`imgui_*` prefix never changes.
+
 G0 surface (M0/M1 are spent milestone names in the main roadmap; wrapper tiers are
 named for the G-track steps that introduce them):
 
 ```c
-int  asmgui_init(const char *title, int width, int height);
-int  asmgui_begin_frame(void);
-void asmgui_end_frame(void);
-void asmgui_shutdown(void);
+int  imgui_init(const char *title, int width, int height);
+int  imgui_begin_frame(void);
+void imgui_end_frame(void);
+void imgui_shutdown(void);
 
-void asmgui_text(const char *text);
-int  asmgui_button(const char *label);
-void asmgui_same_line(void);
-int  asmgui_input_text(const char *label, char *buf, int buf_size);
-int  asmgui_slider_i32(const char *label, int *value, int min, int max);
+void imgui_text(const char *text);
+int  imgui_button(const char *label);
+void imgui_same_line(void);
+int  imgui_input_text(const char *label, char *buf, int buf_size);
+int  imgui_slider_i32(const char *label, int *value, int min, int max);
 ```
 
 G2 surface:
 
 ```c
-int  asmgui_window_begin(const char *title, int *open);
-void asmgui_window_end(void);
-void asmgui_separator(void);
-void asmgui_hex_u64(const char *label, unsigned long long value);
-void asmgui_table_registers(const unsigned long long *regs, int count);
-void asmgui_memory_view(const void *base, unsigned long long addr, int len);
+int  imgui_window_begin(const char *title, int *open);
+void imgui_window_end(void);
+void imgui_separator(void);
+void imgui_hex_u64(const char *label, unsigned long long value);
+void imgui_table_registers(const unsigned long long *regs, int count);
+void imgui_memory_view(const void *base, unsigned long long addr, int len);
 ```
 
-Assembly call shape (win64 shown — `asmgui_*` is a plain C ABI, so calling it is a
+Assembly call shape (win64 shown — `imgui_*` is a plain C ABI, so calling it is a
 *target-ABI* call with the full Win64 duties: shadow space and 16-byte alignment at
 every call, per [asm-debugging-guide.md](asm-debugging-guide.md)):
 
@@ -183,21 +193,21 @@ every call, per [asm-debugging-guide.md](asm-debugging-guide.md)):
     sub rsp, 40                 ; 32B shadow space + 8 to realign, once for the loop
 
 .frame:
-    call asmgui_begin_frame
+    call imgui_begin_frame
     test eax, eax
     jz .quit
 
     lea rcx, [rel hello]        ; win64 arg1; sysv passes rdi
-    call asmgui_text
+    call imgui_text
 
     lea rcx, [rel button]
-    call asmgui_button
+    call imgui_button
     test eax, eax
     jz .not_clicked
     ; handle click
 .not_clicked:
 
-    call asmgui_end_frame
+    call imgui_end_frame
     jmp .frame
 ```
 
@@ -205,7 +215,7 @@ This is intentionally closer to Win32's "message IDs and return values" than to 
 objects/signals or Qt's C++ object model.
 
 **Convention seam, same rule as always.** A tool written in the nadir convention
-(`DESIGN-nadir.md` §2.2) reaches `asmgui_*` the way portable code reaches any OS
+(`DESIGN-nadir.md` §2.2) reaches `imgui_*` the way portable code reaches any OS
 facility: through a thin per-target seam that owns the marshalling. The asymmetry is
 the familiar one — SysV C args are `rdi/rsi/rdx/rcx`, identical to the nadir convention
 for the first four args, so the linux thunk is near-zero; the win64 thunk remaps to
@@ -245,12 +255,12 @@ the asm source.
 
 ## 7. Runtime and purity boundary
 
-`asmgui` is not freestanding nadir. It is a host tool layer.
+The `imgui` wrapper is not freestanding nadir. It is a host tool layer.
 
 That boundary must be explicit:
 
 - Core nadir programs may remain CRT/libc-free.
-- `asmgui` may link to Dear ImGui, a renderer backend, platform libraries, libc on Linux,
+- `imgui` may link to Dear ImGui, a renderer backend, platform libraries, libc on Linux,
   and Windows import libraries on Windows.
 - The wrapper itself is not part of the portable freestanding capability waist.
 - The asm-facing ABI is part of nadir's tooling convention.
@@ -258,11 +268,11 @@ That boundary must be explicit:
 This preserves the original thesis: nadir owns its finite substrate, while tools may use
 host affordances through a narrow adapter.
 
-The concrete cost differs by target. On win64, importing from `asmgui.dll` is the same
+The concrete cost differs by target. On win64, importing from `imgui.dll` is the same
 PE import mechanism core nadir already uses for `kernel32` — no new machinery. On linux,
-linking `libasmgui.so` brings in the dynamic loader, which core nadir binaries (static,
+linking `libimgui.so` brings in the dynamic loader, which core nadir binaries (static,
 raw-syscall) have never touched. That asymmetry is the host-tool boundary made concrete:
-an `asmgui` tool on linux is a host program by construction, not merely by policy.
+an `imgui` tool on linux is a host program by construction, not merely by policy.
 
 The danger is waist creep by convenience. The wrapper must not become "all of ImGui."
 Every exported function earns its place by a real assembly-tool need.
@@ -315,7 +325,7 @@ Why:
 - works across X11/Wayland depending backend/platform support
 - keeps raw Wayland out of the first useful tool
 
-GTK is not the first `asmgui` backend because Dear ImGui already supplies widgets and
+GTK is not the first `imgui` backend because Dear ImGui already supplies widgets and
 interaction. GTK remains a candidate for a separate native app wrapper if nadir later
 needs OS-native dialogs, accessibility, or GNOME integration.
 
@@ -359,7 +369,7 @@ nothing there: **M2 (`open-window`) remains the next milestone** and proceeds
 independently. G5 revisits the M2 artifact for comparison; it does not defer or replace
 it.
 
-1. **G0 - C ABI spike.** Build `asmgui_init`, `begin_frame`, `text`, `button`,
+1. **G0 - C ABI spike.** Build `imgui_init`, `begin_frame`, `text`, `button`,
    `end_frame`, `shutdown`. One NASM demo calls the wrapper and increments a counter.
 2. **G1 - backend pair.** Win64 + D3D11 and Linux + SDL/OpenGL expose the same wrapper
    exports. Same asm-facing demo on both.
@@ -388,8 +398,8 @@ it.
   front-end track.
 - **Linux packaging complexity.** SDL/OpenGL/Vulkan and graphics drivers vary by distro.
   Keep the first Linux target to Manjaro desktop mode and document package assumptions.
-- **Purity confusion.** `asmgui` is not proof that nadir's core is freestanding. It is a
-  host tool adapter. Say that every time.
+- **Purity confusion.** The `imgui` wrapper is not proof that nadir's core is
+  freestanding. It is a host tool adapter. Say that every time.
 
 ---
 

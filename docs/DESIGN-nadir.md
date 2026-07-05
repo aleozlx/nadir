@@ -178,7 +178,7 @@ lookup-table in its purest form.
 GUI splits into two tracks (full treatment in
 [DESIGN-nadir-gui.md](DESIGN-nadir-gui.md)): the **primitive track** — this section:
 `open-window`/`blit`/`close` as capabilities, the honest seam proof, M2 — and a
-**host-tool track** (`asmgui`: Dear ImGui behind a narrow C ABI) for assembly
+**host-tool track** (`imgui`: Dear ImGui behind a narrow C ABI) for assembly
 workbenches. The tool track lives *outside* the freestanding waist — it may link libc
 and a renderer — and is tooling convention, not capability-table content. §5.1–5.2
 below concern the primitive track only.
