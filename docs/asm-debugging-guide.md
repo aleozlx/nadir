@@ -11,6 +11,15 @@ paper over it and no sanitizer to flag it, so the arithmetic below is the only c
 Companion to [DESIGN-nadir.md](DESIGN-nadir.md) §2.2 (ABI stratum). Linux/SysV has its own
 failure modes; this file is Win64-only.
 
+**Where these duties live after v0.3:** under the nadir call convention
+(DESIGN §2.2), only `cap_*` win64 realizations call Win64 code, so the
+shadow-space invariant (#2) applies inside those bodies alone. The alignment
+invariant (#1) became nadir-universal — the convention requires `rsp ≡ 0 (mod 16)`
+at *every* call, both targets — so the `rsp mod 16` walk below now applies to all
+nadir code, and `_start` normalizes loader entry with `and rsp, -16`. The bugs
+documented here are the M0-era code as originally written; the arithmetic is
+unchanged and still the only check.
+
 ---
 
 ## The two invariants everything reduces to
@@ -170,12 +179,19 @@ Now `&written` is at old `[rsp+8]` and arg 5 is at old `[rsp+0]` — different s
   ```asm
       test    eax, eax
       jz      .fail
-      mov     eax, dword [rsp+8]   ; success: bytes written
+      mov     eax, dword [rsp+8]   ; success: bytes written (zero-extend is right here)
       jmp     .done
   .fail:
-      mov     eax, -1
+      mov     rax, -1              ; failure: FULL-WIDTH, see below
   .done:
   ```
+
+  And mind the width on that failure sentinel: `mov eax, -1` zero-extends, leaving
+  `rax = 0x00000000FFFFFFFF` — *positive* 4294967295 to any 64-bit signed check, so
+  a caller testing `rax < 0` reads the failure as a ~4GB success. The 32-bit write
+  is correct for the success path (the byte count is a DWORD, ≥ 0) and wrong for
+  the sentinel — same instruction, opposite verdicts, chosen by width. (This one
+  was bug 4: it survived M0 review and was caught by review on PR #4.)
 
 ---
 

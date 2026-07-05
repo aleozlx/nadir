@@ -2,10 +2,10 @@
 ;
 ; One concept, two hand-written realizations, flag-selected:
 ;   win64: ExitProcess(code)
-;   linux: syscall exit(code)          ; exit_group would also do; exit is enough at M0
+;   linux: syscall exit(code)          ; exit_group would also do; exit is enough
 ;
-; Contract:
-;   in : arg1 = exit code   (win64 rcx / linux rdi)
+; Contract — nadir call convention (nadir.inc; DESIGN §2.2), BOTH targets:
+;   in : rdi = exit code
 ;   Does not return. No epilogue by design — the process is gone.
 
 %include "nadir.inc"
@@ -14,14 +14,13 @@ global cap_exit
 
 %ifdef WIN64
 ; ---- win64 realization ------------------------------------------------------------
-; arg arrives: rcx = code (Win64 arg1). ExitProcess never returns, so no shadow-space
-; bookkeeping to unwind — we align rsp and call.
+; Seam translation: nadir arg1 (rdi) → Win64 arg1 (rcx), then the Win64 call duties.
+; On entry rsp is 16-aligned+8 (the caller's `call` pushed the return address); a bare
+; 32-byte shadow would leave the +8 skew, so reserve 32 shadow + 8 realignment = 40,
+; which both aligns and homes the args (docs/asm-debugging-guide.md, bug 1).
 section .text
 cap_exit:
-    ; rcx already holds the code. On entry rsp is 16-aligned+8 (the caller's `call`
-    ; pushed the return address). Win64 requires rsp 16-aligned *at* the call, so we
-    ; can't use a bare 32-byte SHADOW_ALLOC (32 is a 16-multiple → leaves the +8 skew).
-    ; Reserve 32 shadow + 8 realignment = 40, which both aligns and homes the args.
+    mov     rcx, rdi            ; Win64 arg1 = nadir arg1 (exit code)
     sub     rsp, 40
     call    ExitProcess
     ; unreached
@@ -30,7 +29,7 @@ cap_exit:
 
 %else
 ; ---- linux realization ------------------------------------------------------------
-; arg arrives: rdi = code (SysV arg1) — already the syscall's arg1 register.
+; nadir arg1 (rdi) is already the syscall's arg1 register — zero marshalling.
 section .text
 cap_exit:
     mov     rax, SYS_exit

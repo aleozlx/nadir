@@ -4,13 +4,13 @@
 ;   win64: GetStdHandle(STD_OUTPUT_HANDLE) -> WriteFile(h, buf, len, &written, NULL)
 ;   linux: syscall write(STDOUT_FD, buf, len)
 ;
-; Contract (shared concept keys, per-target detail — DESIGN §2.2):
-;   in : arg1 = buffer pointer   (win64 rcx / linux rdi)
-;        arg2 = byte count        (win64 rdx / linux rsi)
-;   out: rax  = bytes written (>=0) on success; negative/0 on failure.
-;   The caller passes args in the *target's* arg1/arg2 registers; the body below is
-;   written to that target's convention. cap_write is a real function (own
-;   prologue/epilogue, ABI-clean) so it can later be promoted to a testable boundary.
+; Contract — nadir call convention (nadir.inc; DESIGN §2.2), BOTH targets:
+;   in : rdi = buffer pointer, rsi = byte count
+;   out: rax = bytes written (>=0) on success; negative on failure.
+;   The seam translates: the win64 body marshals nadir args into the Win64 call ABI
+;   (and owns its shadow-space/alignment duties); the linux body is already in SysV
+;   roles so it marshals almost nothing. cap_write is a real function (own
+;   prologue/epilogue) so it can later be promoted to a testable boundary.
 
 %include "nadir.inc"
 
@@ -18,31 +18,18 @@ global cap_write
 
 %ifdef WIN64
 ; ---- win64 realization ------------------------------------------------------------
-; Local frame layout (below rbp): we need a 4-byte DWORD for lpNumberOfBytesWritten
-; and a stack slot for WriteFile's 5th argument (lpOverlapped = NULL), plus 32 bytes
-; of shadow space per call. We build one frame covering both calls.
+; nadir args rdi/rsi are Win64 CALLEE-SAVED, so they survive the kernel32 calls
+; untouched — the arg registers double as the stash, no push/pop dance needed.
+; (Under the nadir convention rdi/rsi are volatile, so clobbering them is fine too.)
 ;
-; args arrive: rcx = buf, rdx = len  (Win64 arg1/arg2).
+; Frame: one 24-byte reservation covers realignment and locals. Alignment walk
+; (docs/asm-debugging-guide.md): entry rsp ≡ 8 (mod 16); sub 24 → ≡ 0; SHADOW_ALLOC
+; is a 16-multiple so both kernel32 calls fire at ≡ 0.
 section .text
 cap_write:
-    push    rbp
-    mov     rbp, rsp
-    push    rsi                 ; callee-saved; we stash buf/len across GetStdHandle
-    push    rdi
-    ; Preserve incoming args across the GetStdHandle call (which clobbers rcx/rdx).
-    mov     rsi, rcx            ; rsi = buf
-    mov     rdi, rdx            ; rdi = len
-    ; Reserve locals: keep the "bytes written" DWORD in its OWN slot, distinct from
-    ; WriteFile's stacked arg5. Frame must leave rsp 16-aligned at the inner call sites.
-    ; After push rbp/rsi/rdi (3 pushes) rsp is 16-aligned; subtract a 16-multiple to
-    ; stay aligned. The DWORD lives at [rsp+8]; [rsp+0] is padding.
-    ;
-    ; Why [rsp+8] and not [rsp+0]: SHADOW_ALLOC below does `sub rsp,32`, so the stacked
-    ; arg5 lands at [rsp+32] == the pre-SHADOW [rsp+0]. Parking the &written DWORD at
-    ; [rsp+8] keeps the output slot from aliasing the arg5 input slot.
-    sub     rsp, 16             ; [rsp+8] = lpNumberOfBytesWritten (DWORD); [rsp+0] pad
+    sub     rsp, 24             ; realign + locals: [rsp+8] = &written DWORD, [rsp+0] pad
 
-    ; --- h = GetStdHandle(STD_OUTPUT_HANDLE) ---
+    ; --- h = GetStdHandle(STD_OUTPUT_HANDLE) --- (preserves rdi/rsi)
     mov     ecx, STD_OUTPUT_HANDLE
     SHADOW_ALLOC
     call    GetStdHandle
@@ -51,11 +38,12 @@ cap_write:
 
     ; --- WriteFile(h, buf, len, &written, NULL) ---
     mov     rcx, rax            ; arg1 hFile        = handle
-    mov     rdx, rsi            ; arg2 lpBuffer     = buf
-    mov     r8,  rdi            ; arg3 nNumberOfBytesToWrite = len
+    mov     rdx, rdi            ; arg2 lpBuffer     = nadir arg1 (buf)
+    mov     r8,  rsi            ; arg3 nNumberOfBytesToWrite = nadir arg2 (len)
     lea     r9,  [rsp+8]        ; arg4 lpNumberOfBytesWritten = &written
-    SHADOW_ALLOC                ; 32B shadow; arg5 sits just above it at [rsp+32]
-    mov     qword [rsp+32], 0   ; arg5 lpOverlapped = NULL  (distinct slot from &written)
+    SHADOW_ALLOC                ; 32B shadow; stacked arg5 sits just above at [rsp+32]
+    mov     qword [rsp+32], 0   ; arg5 lpOverlapped = NULL — old [rsp+0], so it can't
+                                ; alias the &written slot at old [rsp+8] (guide, bug 3)
     call    WriteFile
     SHADOW_FREE
     ; rax = BOOL: 0 == failure. Honor the contract (out: rax<0 on failure) instead of
@@ -65,19 +53,17 @@ cap_write:
     mov     eax, dword [rsp+8]  ; rax = written (zero-extended)
     jmp     .done
 .fail:
-    mov     eax, -1             ; contract: negative on failure
+    mov     rax, -1             ; contract: negative on failure — full-width, because
+                                ; `mov eax, -1` zero-extends to +4294967295 in rax
 .done:
-
-    add     rsp, 16
-    pop     rdi
-    pop     rsi
-    pop     rbp
+    add     rsp, 24
     ret                         ; @ret cap_write
                                 ; @end cap_write
 
 %else
 ; ---- linux realization ------------------------------------------------------------
-; args arrive: rdi = buf, rsi = len  (SysV arg1/arg2). Rearrange to the write syscall.
+; nadir args arrive in SysV roles already (rdi = buf, rsi = len); rearrange to the
+; write syscall's fd/buf/len order.
 section .text
 cap_write:
     mov     rdx, rsi            ; arg3 count = len

@@ -114,6 +114,15 @@ hand-written realizations stay pinned to one contract by the behavioral tests
 (DESIGN §6.2), not by shared source text. The descriptor table is documentation
 you read, not codegen you trust.
 
+The v0.3 resolution (DESIGN §2.2) is built directly on the two intersections
+derived above: nadir-to-nadir calls use **one static internal convention** —
+SysV's argument roles, the `rbx/rbp/r12–r15` callee-saved intersection, the
+volatile union, uniform 16-byte alignment at calls — and the `cap_*` seam
+realizations (per-target anyway) translate to kernel32 or `syscall`. One
+convention in the house, real registers on the page, two interpreters at the
+door. The collision graph still exists, but it now lives entirely inside the
+seam bodies, where each is verified against a single target ABI.
+
 ## Further reading
 
 - System V AMD64 psABI — the spec and its discussion archives

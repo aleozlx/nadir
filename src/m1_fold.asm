@@ -1,25 +1,26 @@
-; m1_fold.asm — M1 proof kernel: the non-leaf, 4-arg ABI-stratum exercise (DESIGN §7.2).
+; m1_fold.asm — M1 proof kernel: the non-leaf, 4-arg ABI exercise (DESIGN §7.2).
 ;
 ; fold(a, b, c, d) = ((a*10 + b)*10 + c)*10 + d — a positional base-10 fold. The
 ; function is deliberately ASYMMETRIC: every permutation of the arguments yields a
-; different result, so a swapped arg register in either realization changes the
-; printed digits and fails the behavioral test. fold(6,7,8,9) = 6789 — the output
-; literally spells the argument order.
+; different result, so a misrouted arg register anywhere between _start and the seam
+; changes the printed digits and fails the behavioral test. fold(6,7,8,9) = 6789 —
+; the output literally spells the argument order.
 ;
-; What M1 pins that M0 could not:
-;   · arg3/arg4 — the registers where the conventions diverge most visibly
-;     (win64 r8/r9 vs sysv rdx/rcx; sysv arg4 is rcx, which win64 uses for arg1).
-;   · callee-saved preservation, both directions: m1_fold preserves r12–r15 for its
+; ONE body, both targets (DESIGN §2.2 v0.3): m1_fold speaks the nadir call
+; convention — args rdi/rsi/rdx/rcx, result rax, no shadow space (that duty lives
+; inside cap_* win64). What it still pins:
+;   · the seam translation — cap_write receives nadir args on both targets and must
+;     marshal them into kernel32/syscall correctly, twice, mid-computation.
+;   · callee-saved discipline, both directions: m1_fold preserves r12–r15 for its
 ;     caller (push/pop), and *relies* on them to carry a..d and the result across
-;     its own calls — if cap_write clobbered them, the digits print wrong.
-;   · non-leaf frame discipline: prologue/epilogue bracketing three inner calls.
+;     its three inner calls — if a capability clobbered them, the digits print wrong.
 ;
 ; Contract:
-;   in : arg1..arg4 = a, b, c, d   (win64 rcx/rdx/r8/r9 · linux rdi/rsi/rdx/rcx)
-;   out: rax = fold value (same register, both ABIs)
+;   in : rdi, rsi, rdx, rcx = a, b, c, d
+;   out: rax = fold value
 ;   effect: writes "nadir M1: fold(a,b,c,d) = <value>\n" to stdout via cap_write.
-;   r12–r15 are stash registers *because* they sit in the callee-saved intersection
-;   of the two conventions — the one choice that reads identically in both bodies.
+;   r12–r15 are the stash *because* they are convention callee-saved — and that set
+;   is the win64∩sysv intersection, so even the OS boundaries preserve it for free.
 
 %include "nadir.inc"
 
@@ -38,77 +39,22 @@ section .bss
 dec_buf:        resb 21
 
 section .text
-%ifdef WIN64
-; ---- win64 realization ------------------------------------------------------------
-; args arrive: rcx=a, rdx=b, r8=c, r9=d (Win64 arg1..arg4).
-; Alignment walk (docs/asm-debugging-guide.md): entry rsp ≡ 8 (mod 16); four pushes
-; flip parity four times → still ≡ 8; sub 40 (≡ 8 mod 16) → ≡ 0 at every inner call,
-; with the 40 bytes doubling as the mandatory 32-byte shadow space.
+; Alignment walk (docs/asm-debugging-guide.md; the convention keeps the Win64 rule
+; on both targets): entry rsp ≡ 8 (mod 16); four pushes flip parity four times →
+; still ≡ 8; sub 8 → ≡ 0 at every inner call. No shadow space — nadir callees don't
+; assume home slots; the kernel32 shadow is allocated inside cap_write itself.
 m1_fold:
     push    r12
     push    r13
     push    r14
     push    r15
-    sub     rsp, 40             ; 32 shadow + 8 realign, held across all three calls
-    mov     r12, rcx            ; a → callee-saved: must survive cap_write below
-    mov     r13, rdx            ; b
-    mov     r14, r8             ; c
-    mov     r15, r9             ; d
-
-    ; --- cap_write(prefix, prefix_len) — clobbers every volatile register ---
-    lea     rcx, [rel m1_prefix]
-    mov     rdx, m1_prefix_len
-    call    cap_write
-
-    ; --- the fold: a..d survived the call only if callee-saved discipline held ---
-    mov     rax, r12
-    imul    rax, 10
-    add     rax, r13
-    imul    rax, 10
-    add     rax, r14
-    imul    rax, 10
-    add     rax, r15            ; rax = fold(a,b,c,d)
-    mov     r12, rax            ; result must survive two more calls
-
-    ; --- render: digits backward ending at dec_buf+20, newline at [dec_buf+20] ---
-    mov     byte [rel dec_buf+20], 10
-    mov     rcx, rax            ; arg1 = value
-    lea     rdx, [rel dec_buf+20]  ; arg2 = buf_end
-    call    u64_to_dec          ; rax → first digit
-
-    ; --- cap_write(first_digit, digits+newline) ---
-    lea     rdx, [rel dec_buf+21]
-    sub     rdx, rax            ; arg2 = length through the newline
-    mov     rcx, rax            ; arg1 = buffer
-    call    cap_write
-
-    mov     rax, r12            ; return the fold value
-    add     rsp, 40
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    ret                         ; @ret m1_fold
-                                ; @end m1_fold
-
-%else
-; ---- linux realization ------------------------------------------------------------
-; args arrive: rdi=a, rsi=b, rdx=c, rcx=d (SysV arg1..arg4 — note arg4 lands in rcx,
-; the register win64 uses for arg1; this is the divergence M1 exists to pin).
-; Alignment walk: SysV also requires rsp ≡ 0 (mod 16) at every call. Entry ≡ 8; four
-; pushes → ≡ 8; sub 8 → ≡ 0 at the inner calls. No shadow space on this side.
-m1_fold:
-    push    r12
-    push    r13
-    push    r14
-    push    r15
-    sub     rsp, 8              ; realign only — SysV has no shadow space
+    sub     rsp, 8              ; realign only, held across all three calls
     mov     r12, rdi            ; a → callee-saved: must survive cap_write below
     mov     r13, rsi            ; b
     mov     r14, rdx            ; c
     mov     r15, rcx            ; d
 
-    ; --- cap_write(prefix, prefix_len) — syscall clobbers rcx/r11 + volatiles ---
+    ; --- cap_write(prefix, prefix_len) — clobbers every convention-volatile reg ---
     lea     rdi, [rel m1_prefix]
     mov     rsi, m1_prefix_len
     call    cap_write
@@ -143,4 +89,3 @@ m1_fold:
     pop     r12
     ret                         ; @ret m1_fold
                                 ; @end m1_fold
-%endif

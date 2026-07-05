@@ -136,15 +136,24 @@ one workflow per target so each carries its own badge.
 - **opt/intent-map** — the intent tool; build with its `build.ps1` (Windows,
   MSVC + vendored SQLite amalgamation) or `make` (linux, system libsqlite3).
 
-## Win64 ABI — read before touching asm
+## Calling conventions — read before touching asm
 
-The Win64 calling convention has two invariants that a passing run does **not**
-verify (misalignment faults only when the callee happens to touch the stack with
-an alignment-sensitive instruction): 16-byte stack alignment *at the call*, and
-32 bytes of caller-allocated shadow space before *any* call. The full lessons,
-with the `rsp mod 16` arithmetic and the three real bugs from M0, are in
-[docs/asm-debugging-guide.md](docs/asm-debugging-guide.md). Walk the arithmetic;
-don't trust the exit code.
+nadir-to-nadir calls use **one internal convention on both targets** (DESIGN
+§2.2, codified in [src/nadir.inc](src/nadir.inc)): args `rdi/rsi/rdx/rcx`,
+return `rax`, callee-saved `rbx/rbp/r12–r15`, `rsp ≡ 0 (mod 16)` at every call,
+no shadow space. The target ABIs appear only inside `cap_*` realizations (which
+translate at the seam) and at OS entries (`_start` normalizes with
+`and rsp, -16`).
+
+The Win64 convention — in force inside `cap_*` win64 bodies — has two invariants
+that a passing run does **not** verify (misalignment faults only when the callee
+happens to touch the stack with an alignment-sensitive instruction): 16-byte
+stack alignment *at the call*, and 32 bytes of caller-allocated shadow space
+before *any* call into Win64 code. The full lessons, with the `rsp mod 16`
+arithmetic and the three real bugs from M0, are in
+[docs/asm-debugging-guide.md](docs/asm-debugging-guide.md); the register history
+is in [docs/abi-lineage.md](docs/abi-lineage.md). Walk the arithmetic; don't
+trust the exit code.
 
 ## Conventions
 
