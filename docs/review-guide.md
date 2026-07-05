@@ -51,9 +51,11 @@ should keep pace:
   per-target facts.
 - New symbol → a new `allocate`d binding; retired symbol → `retire`, never
   hard-delete or renumber.
-- The `.md` mirror ([docs/nadir.intent.db.md](nadir.intent.db.md)) was
-  regenerated (`python scripts/backup_intent_maps.py`) and committed alongside
-  the `.db`, so the two aren't out of step.
+
+Do **not** gate review on the `.md` mirror: it's a safety net regenerated on
+demand and drifts from the `.db` by design, so its sync state is not a review
+signal for now. Making the intent surface reviewable is a separate pass, tracked
+elsewhere.
 
 ## 4. Freestanding & build discipline
 
