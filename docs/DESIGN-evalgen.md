@@ -11,43 +11,24 @@ to [DESIGN-nadir.md](DESIGN-nadir.md)
 
 ## 0. Provenance and placement
 
-This design originated as **villen-evalgen1**, a villen-family project (LAN-local,
-single-purpose, no external uptime dependency). On second thought the engine belongs to
-**nadir**, because everything that makes it tractable is a nadir thesis:
+Originated as **villen-evalgen1**; adopted into **nadir** because everything that
+makes the engine tractable is a nadir thesis: the intent↔instruction bijection
+(DESIGN §1) is what lets contracts attach at labels and proofs stay per-block;
+intent-map's immutable keys are what make the cache sound (§3.4); the nadir call
+convention (DESIGN §2.2) is the default `regmap`; and the Win64 in-seam invariants
+that *a passing run does not verify*
+([asm-debugging-guide.md](asm-debugging-guide.md)) are exactly what L1's lints check —
+evalgen is the machine that walks the arithmetic. **villen becomes the first
+downstream consumer**, taking nadir (and with it evalgen) as a dependency; the Deck
+survives below as reference deployment, not owner.
 
-- The **intent↔instruction bijection** (DESIGN §1) is what lets contracts attach at
-  labels and proofs stay per-block — at asm nothing sits between symbol and silicon, so
-  a label-level contract is a contract on the actual bytes.
-- **intent-map's immutable keys** are what make the cache sound (§3.4): a renamed label
-  is a new interface, and the store already enforces that.
-- The **nadir call convention** (DESIGN §2.2) is the default register contract; evalgen's
-  `regmap` generalizes a discipline nadir already practices.
-- nadir's own docs name the gap evalgen closes: the Win64 in-seam invariants (16-byte
-  alignment at call, shadow space before any call) that *a passing run does not verify*
-  ([asm-debugging-guide.md](asm-debugging-guide.md)). "Walk the arithmetic; don't trust
-  the exit code" — evalgen is the machine that walks the arithmetic.
-
-**villen becomes the first downstream consumer**: it takes nadir (and with it evalgen)
-as a dependency, not the other way around. Deck deployment details survive below as the
-reference consumer, not as the owner.
-
-Placement inside nadir, precisely:
-
-- **Not a §4 capability.** nadir's capability table is the thin waist and stays
-  single-digit; evalgen never appears in it and never widens it. It observes the
-  artifact; it is not part of the artifact's closure.
-- **Tooling stratum (DESIGN §8): corpus-authored verb, modular C++ engine.** The
-  self-hosting discipline covers nadir's *verbs*, not the engines they drive — nadir
-  already `spawn`s nasm and the linkers, external C/C++ programs, without ceremony.
-  evalgen takes the same seam: the engine is a modular C++ component (§5.2) that
-  enters the corpus workflow behind a thin, corpus-authored verb (`nadir eval`, §5.2),
-  exactly the way nasm sits behind `nadir build`. The heavyweight parts (LLM, SMT,
-  disassembler) never enter the shipped binaries, and the corpus stays buildable and
-  testable without them (§5).
-- **The mechanized reconciler (DESIGN §6.1).** The interleaved reconcile loop names its
-  own bottleneck: the human is the fixpoint. evalgen mechanizes the parts that can be —
-  L1 mechanizes the brushing, L2 mechanizes falsification, the generator mechanizes
-  proposal — while acceptance stays a human act.
+Placement: the **tooling stratum** (DESIGN §8), not a §4 capability — the capability
+table is the thin waist, and evalgen never widens it. Structurally it is the
+mechanization of the reconcile loop (DESIGN §6.1): L1 mechanizes the brushing, L2
+falsification, the generator proposal, while acceptance stays a human act. The engine
+is modular C++ behind a thin corpus-authored verb (`nadir eval`, §5.2) — the same seam
+nasm occupies behind `nadir build`: self-hosting covers verbs, not the engines they
+drive, and the corpus stays buildable and testable without the observatory (§5).
 
 ---
 
