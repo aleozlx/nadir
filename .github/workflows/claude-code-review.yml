@@ -3,25 +3,20 @@ name: Claude Code Review
 on:
   pull_request:
     types: [opened, synchronize, ready_for_review, reopened]
-    # Optional: Only run on specific file changes
-    # paths:
-    #   - "src/**/*.ts"
-    #   - "src/**/*.tsx"
-    #   - "src/**/*.js"
-    #   - "src/**/*.jsx"
 
 jobs:
   claude-review:
-    # Optional: Filter by PR author
-    # if: |
-    #   github.event.pull_request.user.login == 'external-contributor' ||
-    #   github.event.pull_request.user.login == 'new-developer' ||
-    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
+    # Trust gate + fork guard in one (mirrors aleozlx/villen): only run for PRs
+    # authored by the owner or a member/collaborator. Outside-contributor and
+    # fork PRs (author_association CONTRIBUTOR / NONE / FIRST_TIME_CONTRIBUTOR)
+    # are skipped, not failed — a fork PR never receives CLAUDE_CODE_OAUTH_TOKEN,
+    # so running it would only error the check.
+    if: ${{ contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association) }}
 
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: write
       issues: read
       id-token: write
 
@@ -38,13 +33,19 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
           plugins: 'code-review@claude-code-plugins'
-          # Run the standard code-review plugin, but first read the repo's
-          # review guide and apply its nadir-specific focus (ABI arithmetic,
-          # win64/linux realization divergence, intent-map hygiene).
+          # Run the standard code-review plugin, but first read the repo's review
+          # guide and apply its nadir-specific focus (ABI arithmetic, win64/linux
+          # realization divergence, intent-map hygiene). --comment publishes the
+          # findings as inline PR comments.
           prompt: |
             Read docs/review-guide.md in this repository and apply its
             nadir-specific review focus in addition to the standard checks, then:
-            /code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://code.claude.com/docs/en/cli-reference for available options
-
+            /code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }} --comment
+          # Authorize the posting tools (inline-comment + the gh commands the
+          # review uses) and the read tools it needs to open files for cross-file
+          # context — incl. docs/review-guide.md above. Without these the review
+          # runs but publishes nothing, which is why the earlier read-only perms
+          # never errored: it was never posting. gh/inline-comment post via the
+          # workflow GITHUB_TOKEN, hence pull-requests: write.
+          claude_args: |
+            --allowedTools "Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"

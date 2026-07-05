@@ -25,8 +25,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
-      issues: read
+      pull-requests: write # gh/action posts replies via GITHUB_TOKEN, needs write
+      issues: write # same, for issue-comment replies
       id-token: write
       actions: read # Required for Claude to read CI results on PRs
     steps:
