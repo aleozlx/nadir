@@ -273,7 +273,7 @@ The concrete cost differs by target. On win64, importing from `nadir_ig.dll` is 
 PE import mechanism core nadir already uses for `kernel32` — no new machinery. On linux,
 linking `libnadir_ig.so` brings in the dynamic loader, which core nadir binaries (static,
 raw-syscall) have never touched. That asymmetry is the host-tool boundary made concrete:
-an `nadir_ig` tool on linux is a host program by construction, not merely by policy.
+a `nadir_ig` tool on linux is a host program by construction, not merely by policy.
 
 The danger is waist creep by convenience. The wrapper must not become "all of ImGui."
 Every exported function earns its place by a real assembly-tool need.
@@ -323,7 +323,7 @@ Why:
 
 - small enough
 - proven Dear ImGui examples exist
-- works across X11/Wayland depending backend/platform support
+- works across X11/Wayland depending on backend/platform support
 - keeps raw Wayland out of the first useful tool
 
 GTK is not the first `nadir_ig` backend because Dear ImGui already supplies widgets and
