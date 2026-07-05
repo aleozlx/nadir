@@ -311,6 +311,8 @@ its L1 grows from (real dataflow subsuming the grep-level net — including the
 shadow-space and `rsp mod 16` invariants a passing run can't verify), and the
 promoted-label discipline (§6.4) hands it block boundaries for free. Owned by nadir,
 consumed by villen; tooling stratum, not a §4 capability — the waist doesn't move.
+The engine is modular C++ behind a corpus-authored verb (`nadir eval`, §8) — the same
+seam nasm occupies behind `nadir build`.
 
 1. **M0 — prove the seam.** `exit`+`write` at capability level; two hand-written rows
    (`linux: syscall` / `win64: kernel32`), flag-selected. A compute kernel printing a
@@ -375,6 +377,16 @@ target rows. Adds one capability — `spawn` (`CreateProcessA` / `fork`+`execve`
 nadir reaches inevitably once it drives anything, so it's a "when," not a cost. With
 `build` + `test` + the corpus beneath, all three are authored in the corpus: nadir
 builds itself, tests itself, builds others. *Der Compiler, der sich selbst kocht.*
+
+**`nadir eval` — third verb on the horizon, same seam as nasm.** When the evalgen
+track (§6.5, [DESIGN-evalgen.md](DESIGN-evalgen.md)) produces an engine worth calling
+from the corpus workflow, it gets a verb: thin corpus-authored orchestration that
+`spawn`s the one-shot evalgen CLI, forwards the report, propagates the exit code. The
+engine stays modular C++ — self-hosting covers verbs, not the engines they drive;
+nadir already spawns nasm and the linkers without ceremony, and evalgen enters through
+the same door. Needs nothing beyond `spawn` + `write`, both already forced by
+`nadir build`. Earned pull-based like every verb, and the optionality rule (§9) still
+binds: the corpus must build and test without it.
 
 **Bootstrap order — external toolchain first, self-host one rung at a time.** scons +
 hand-run `nasm` boots the earliest programs. `nadir test` lands first (file I/O only,

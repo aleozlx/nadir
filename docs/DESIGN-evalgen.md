@@ -36,11 +36,14 @@ Placement inside nadir, precisely:
 - **Not a §4 capability.** nadir's capability table is the thin waist and stays
   single-digit; evalgen never appears in it and never widens it. It observes the
   artifact; it is not part of the artifact's closure.
-- **Tooling stratum (DESIGN §8), deliberately not self-hosted.** `nadir test` and
-  `nadir build` are authored in the corpus; evalgen is the observatory next to it —
-  LLM, SMT, and disassembler engines are allowed to be heavyweight precisely because
-  they never touch the artifact's runtime and the corpus stays buildable and testable
-  without them.
+- **Tooling stratum (DESIGN §8): corpus-authored verb, modular C++ engine.** The
+  self-hosting discipline covers nadir's *verbs*, not the engines they drive — nadir
+  already `spawn`s nasm and the linkers, external C/C++ programs, without ceremony.
+  evalgen takes the same seam: the engine is a modular C++ component (§5.2) that
+  enters the corpus workflow behind a thin, corpus-authored verb (`nadir eval`, §5.2),
+  exactly the way nasm sits behind `nadir build`. The heavyweight parts (LLM, SMT,
+  disassembler) never enter the shipped binaries, and the corpus stays buildable and
+  testable without them (§5).
 - **The mechanized reconciler (DESIGN §6.1).** The interleaved reconcile loop names its
   own bottleneck: the human is the fixpoint. evalgen mechanizes the parts that can be —
   L1 mechanizes the brushing, L2 mechanizes falsification, the generator mechanizes
@@ -395,23 +398,35 @@ sigil-based line grammar. evalgen adds no second store and no sidecar files.
   **contract diffs reviewable in git**, a first answer to risk #5 (§8). The existing
   rule holds: after any `annotate`, regenerate the mirror and commit both files.
 
-### 5.2 Process architecture
+### 5.2 Process architecture — one core, two frontends, one verb
 
-One resident daemon, **evalgend**: a single C++ binary embedding its dependencies —
-libllama (the resident 7B; model load cost alone forces the daemon design), Capstone
+The engine is a modular C++ component, **libevalgen**, embedding its dependencies —
+libllama (the resident 7B; model load cost alone forces the resident design), Capstone
 (lints/dataflow), Triton's C++ API + Z3 C API (L2), SQLite (read-only intent-map
 connection + evalgen's own cache db). llvm-mca is the one subprocess (per-block
-invocations, results cached by block hash). Internal job queue with a small worker
-pool; blocks currently visible in the editor (client-hinted) jump the queue.
+invocations, results cached by block hash). Two thin frontends share the core:
 
-evalgend is deliberately **not** a nadir program (§0): the self-hosting discipline
-covers the artifact's own verbs (`nadir test`, `nadir build`); the observatory is
-allowed C++ and heavy engines because it stays outside the corpus closure. Pin its
-tool stack the way intent-map is pinned — versioned under `opt/`, reproducible from a
-checkout.
+- **evalgend** — the resident daemon for the editor hot path. Internal job queue with
+  a small worker pool; blocks currently visible in the editor (client-hinted) jump the
+  queue. IPC: µWS serving JSON over localhost WebSocket — the transport villen already
+  uses, so the future intent editor and any LSP shim are just two clients of the same
+  socket.
+- **evalgen (one-shot CLI)** — the same pipeline in batch mode: take file paths, emit
+  the §5.3 JSON to stdout, exit nonzero on any eliminating lint or refuted
+  prove-required contract. This is the frontend `nadir eval` spawns, and what a CI leg
+  would call.
 
-IPC: µWS serving JSON over localhost WebSocket — the transport villen already uses, so
-the future intent editor and any LSP shim are just two clients of the same socket.
+**`nadir eval` — the verb seam.** nadir's verb discipline (DESIGN §8) applies
+unchanged: a corpus-authored verb is thin orchestration over a spawned external
+engine, exactly as `nadir build` shells out to nasm and the linker. `nadir eval` needs
+only `spawn` + `write` — spawn the one-shot CLI, forward the report, propagate the
+exit code — so it rides on capabilities `nadir build` already forces. Like every verb
+it is earned pull-based: it lands when the E-track produces an engine worth calling
+from the corpus workflow, not before.
+
+The engine itself is deliberately **not** a nadir program (§0): self-hosting covers
+the verbs, and C++ is the right tool for the observatory. Pin its tool stack the way
+intent-map is pinned — versioned under `opt/`, reproducible from a checkout.
 
 ### 5.3 Output protocol
 
@@ -541,8 +556,9 @@ generated code; any network requirement in the core loop.
 
 And, per placement (§0): evalgen is **not** a §4 capability and never enters the
 capability table; it is **not** a build or test dependency of the corpus — behavioral
-tests (DESIGN §6.2) remain the cross-target ground truth with or without it; and it is
-**not** self-hosted — the observatory stays outside the artifact it observes.
+tests (DESIGN §6.2) remain the cross-target ground truth with or without it; and the
+*engine* is **not** self-hosted — corpus authorship stops at the thin `nadir eval`
+verb (§5.2); the observatory stays outside the artifact it observes.
 
 ---
 
