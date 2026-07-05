@@ -285,7 +285,7 @@ exemplar, spending prompt budget on it like any other.
    0.2 / 0.6 / 1.0 split) — diversity from temperature, not prompt mutation. Dedup by
    canonical instruction-sequence hash before scoring.
 2. **L1 pruning is lexicographic, not scalar:** (a) hard lints and contract violations
-   are eliminating — a candidate writing outside its `modifies` clause is dead on
+   are disqualifying — a candidate writing outside its `modifies` clause is dead on
    arrival, no score redeems it; (b) survivors rank by intent-incongruence; (c) ties
    break on cost model. The eval vector stays a vector; lexicographic order encodes
    "correct before fast."
@@ -393,7 +393,7 @@ invocations, results cached by block hash). Two thin frontends share the core:
   uses, so the future intent editor and any LSP shim are just two clients of the same
   socket.
 - **evalgen (one-shot CLI)** — the same pipeline in batch mode: take file paths, emit
-  the §5.3 JSON to stdout, exit nonzero on any eliminating lint or refuted
+  the §5.3 JSON to stdout, exit nonzero on any disqualifying lint or refuted
   prove-required contract. This is the frontend `nadir eval` spawns, and what a CI leg
   would call.
 
@@ -424,7 +424,7 @@ adapter, not the format:
  "cache": {"hit": false}}
 ```
 
-The LSP adapter maps: eliminating lints → Error; contradicts-intent quadrant → Warning;
+The LSP adapter maps: disqualifying lints → Error; contradicts-intent quadrant → Warning;
 cost → Hint with the full vector in the diagnostic's `data` field; L3 counterexamples →
 `relatedInformation`. The three gutter channels survive in `data` even where an editor
 renders only severity — no information is destroyed to fit LSP, only down-rendered.
