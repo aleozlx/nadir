@@ -3,7 +3,7 @@
 *An autological, arch-agnostic asm convention and capability set. Canonical asm; intent
 and instrumentation as out-of-band projections.*
 
-Status: draft v0.3 · asm-canonical · companion to `intent-map`
+Status: draft v0.4 · asm-canonical · companion to `intent-map`
 
 ---
 
@@ -306,9 +306,22 @@ die Prüfung kommt und geht.*
 - **Cost:** manual sentinel placement, but only on *promoted* labels; the untested bulk
   stays bare. Placing the sentinel *is* the testability contract made in-source.
 
----
-
-## 7. Roadmap
+### 6.5 Horizon — evalgen, the mechanized reconciler
+§6.1 names its own bottleneck: the human is the fixpoint, and that doesn't scale to
+agent-swarm authoring. **evalgen** ([DESIGN-evalgen.md](DESIGN-evalgen.md)) is the
+planned mechanization — a three-layer engine (fast static eval: cost model + dataflow
+lints + intent-incongruence scoring; on-demand per-block proving of predicate contracts
+against instruction semantics; counterexample rendering on failure) plus a
+contract-conditioned generator whose candidates a human accepts or rejects. The `.asm`
+stays canonical: intent remains the falsifiable projection — evalgen makes
+falsification mechanical and proposals cheap, while acceptance stays a human act, so
+canonicity never migrates to the intent layer. The §6.2 static-lint tier is the seed
+its L1 grows from (real dataflow subsuming the grep-level net — including the
+shadow-space and `rsp mod 16` invariants a passing run can't verify), and the
+promoted-label discipline (§6.4) hands it block boundaries for free. Owned by nadir,
+consumed by villen; tooling stratum, not a §4 capability — the waist doesn't move.
+The engine is modular C++ behind a corpus-authored verb (`nadir eval`, §8) — the same
+seam nasm occupies behind `nadir build`.
 
 1. **M0 — prove the seam.** `exit`+`write` at capability level; two hand-written rows
    (`linux: syscall` / `win64: kernel32`), flag-selected. A compute kernel printing a
@@ -340,6 +353,12 @@ die Prüfung kommt und geht.*
    Assembler.*
 7. **M4+ — widen the table, pull-based.** `read`/`alloc`/`open` as real programs demand.
    Never speculatively.
+8. **E-track — evalgen (horizon, own numbering).** The evaluation & generation engine
+   runs as its own milestone track (E0–E5, [DESIGN-evalgen.md](DESIGN-evalgen.md) §6)
+   so it never blocks or renumbers M-milestones. E0 (cost gutter + dataflow lints) is
+   independently useful and can land at any point; the prover legs (E2–E3) give the
+   Win64 in-seam invariants their first mechanical check. Behavioral tests (§6.2)
+   remain the cross-target ground truth throughout.
 
 ---
 
@@ -369,6 +388,16 @@ target rows. Adds one capability — `spawn` (`CreateProcessA` / `fork`+`execve`
 nadir reaches inevitably once it drives anything, so it's a "when," not a cost. With
 `build` + `test` + the corpus beneath, all three are authored in the corpus: nadir
 builds itself, tests itself, builds others. *Der Compiler, der sich selbst kocht.*
+
+**`nadir eval` — third verb on the horizon, same seam as nasm.** When the evalgen
+track (§6.5, [DESIGN-evalgen.md](DESIGN-evalgen.md)) produces an engine worth calling
+from the corpus workflow, it gets a verb: thin corpus-authored orchestration that
+`spawn`s the one-shot evalgen CLI, forwards the report, propagates the exit code. The
+engine stays modular C++ — self-hosting covers verbs, not the engines they drive;
+nadir already spawns nasm and the linkers without ceremony, and evalgen enters through
+the same door. Needs nothing beyond `spawn` + `write`, both already forced by
+`nadir build`. Earned pull-based like every verb, and the optionality rule (§9) still
+binds: the corpus must build and test without it.
 
 **Bootstrap order — external toolchain first, self-host one rung at a time.** scons +
 hand-run `nasm` boots the earliest programs. `nadir test` lands first (file I/O only,
@@ -402,6 +431,11 @@ der Reiz.*
   goes through an OS-stratum shim, never by bending the internal convention.
 - **GUI event-model leak.** Per-OS loops are right at toy scale; revisit only if a real
   program needs uniform event handling across both targets.
+- **evalgen weight vs. the finished-artifact property.** The engine's stack (LLM, SMT,
+  Capstone, mca) lives outside the corpus and must stay optional: nadir remains
+  buildable and testable with scons + nasm + pytest alone. If the corpus ever
+  *requires* the observatory to be trusted, the thesis has inverted. Pin its tool
+  stack like intent-map (`opt/`, submodule SHA).
 - **intent-map recall gap.** FTS5 keyword OR-matching misses semantic recall
   (`"controls coolant flow"` vs query `thermal management`). A `sqlite-vec` sidecar
   closes it additively without touching the wire grammar — *after* the checker, not
