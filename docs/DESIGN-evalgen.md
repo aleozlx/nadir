@@ -272,8 +272,9 @@ The proposer sees, per block: the contract 4-tuple ⟨pre, post, modifies, regma
 (§2.1), the prose intent, predecessor/successor interfaces (so register conventions
 line up), the µarch cost of the current block from L1 (the number to beat), the
 project-priors rules file (§3.1), and 1–3 few-shot exemplars of (contract, accepted
-block) pairs from evalgen's accepted-block corpus (§4.4). **The incumbent never conditions the proposer by
-default** — its *text* stays out of the prompt (its quality is arbitrary, and the
+block) pairs from evalgen's accepted-block corpus (§4.4).
+**The incumbent never conditions the proposer by default** — its *text* stays out of the
+prompt (its quality is arbitrary, and the
 program is prompted by intent, not by another program); only its measured L1 cost is
 passed, as the number to beat. It instead enters the tournament as **candidate zero**:
 scored, proved, and ranked
@@ -505,7 +506,8 @@ shadow-space lint that behavioral tests provably cannot catch.*
 **E1 — Surprisal.** Link libllama into evalgend (resident Qwen2.5-Coder-7B, Q4/Q5);
 two-pass conditional scoring per §3.1 with `summary` as the conditioning string;
 threshold tuning against a small corpus of known-good and known-bad blocks harvested
-from the git history of the `.asm` files joined with the intent DB at each commit. *Success: the detector flags a real intent-incongruent instruction
+from the git history of the `.asm` files joined with the intent DB at each commit.
+*Success: the detector flags a real intent-incongruent instruction
 (conventional code contradicting its stated intent) without flagging ten
 justified-but-unusual ones.*
 
@@ -558,8 +560,8 @@ verb (§5.2); the observatory stays outside the artifact it observes.
    per-target obligation sets (§2.2).
 2. **Surprisal precision on asm.** Asm token distributions are thin even in code
    models. If E1 precision disappoints, a LoRA on (intent, block) pairs harvested from
-   the corpus's git history joined with the intent DB is the cheap sharpening path — and it bakes in project priors no
-   pretrained model has.
+   the corpus's git history joined with the intent DB is the cheap sharpening path — and
+   it bakes in project priors no pretrained model has.
 3. **Semantics gaps.** Triton/angr instruction coverage vs. what real blocks use (esp.
    AVX-512 subsets). K semantics arbitration adds integration cost; may defer to "trust
    Triton, flag unmodeled instructions" in v1. The nadir corpus's smallness is an ally:

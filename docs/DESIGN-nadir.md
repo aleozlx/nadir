@@ -237,8 +237,9 @@ agent-swarm authoring. The tiers below mechanize the parts that can be.
 - **Behavioral tests** at capability/function boundaries — the bulk. *Same test, both
   ABIs*: run against win64 and linux binaries, assert identical observable behavior.
   This is where the two hand-written realizations get pinned to one contract — the flag
-  swaps implementation, the test proves they didn't diverge in meaning. *Ein Test, zwei Backends.* Slots onto the existing `tests/test_m0.py`/`test_m1.py` pytest harness; only delta is
-  loading PE vs ELF.
+  swaps implementation, the test proves they didn't diverge in meaning. *Ein Test, zwei
+  Backends.* Slots onto the existing `tests/test_m0.py`/`test_m1.py` pytest harness; only
+  delta is loading PE vs ELF.
 - **Promoted-label tests** — critical invariants deliberately refactored to sit at a
   call boundary (own prologue/epilogue, ABI-clean) so they're callable in isolation.
   Testability pressure doubles as a decomposition heuristic: labels worth testing get
