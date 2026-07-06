@@ -131,9 +131,10 @@ optimization surface — something compilers barely exploit. Target ABIs bind on
 nadir already concentrates them: inside `cap_*` realizations and at OS entries, and
 those boundaries are exactly the labels whose bindings carry the `abi:*` concept keys.
 For in-seam blocks the ABI duties become *checkable obligations* in the contract:
-shadow space allocated before any Win64 call, `rsp mod 16` discipline, the extended
-Win64 callee-saved set — the invariants
-[asm-debugging-guide.md](asm-debugging-guide.md) documents as invisible to passing runs.
+shadow space allocated before any Win64 call and `rsp mod 16` discipline — the two
+invariants [asm-debugging-guide.md](asm-debugging-guide.md) documents as invisible to
+passing runs — plus the extended Win64 callee-saved set (DESIGN §2.2, the
+`abi:callee-saved` binding).
 
 **One interface, two proof obligations at the seam.** A capability like `cap_write` has
 one nadir-level interface contract (pre/post in nadir-convention vocabulary) and two
@@ -171,10 +172,10 @@ Amortized pattern evaluation, no execution. Three signal families, fused into a
 per-line score vector (not a scalar — perf/correctness-risk/intent-fit are separate
 gutter channels):
 
-1. **Static cost model.** uiCA for per-instruction throughput and port pressure on
-   Intel µarchs (~1% error vs llvm-mca's ~10–20%); llvm-mca as the fallback path for
-   Zen 2 (the Deck's silicon — mca's AMD scheduling models are the pragmatic choice
-   there). Output: cycles/bottleneck-port per line.
+1. **Static cost model.** llvm-mca in v1 (per-block subprocess; its AMD scheduling
+   models fit Zen 2 — the Deck's silicon — and it needs no per-µarch tuning). uiCA is a
+   later option where Intel-µarch precision earns a second subprocess (~1% error vs
+   llvm-mca's ~10–20%, but Intel-only). Output: cycles/bottleneck-port per line.
 2. **Dataflow lints.** Capstone-based def-use analysis per block: dead register writes,
    EFLAGS clobber-before-read, partial-register stalls, writes violating the block's
    declared regmap. A few hundred lines of dataflow over existing label boundaries.
@@ -237,13 +238,15 @@ Intent contracts are the memoization boundary, with **per-layer keys** so no lay
 recomputes for an edit that cannot affect it:
 
 ```
-L1 cost/lints    ← hash(block_bytes, regmap)
-L1 incongruence  ← hash(block_bytes, summary_text)
+L1 cost/lints    ← hash(block_bytes, regmap, rules_hash)
+L1 incongruence  ← hash(block_bytes, summary_text, rules_hash)
 L2/L3            ← hash(block_bytes, canonical(pre, post, modifies, regmap))
 ```
 
-A prose-only `summary` edit re-runs surprisal but not the prover; a contract edit
-re-runs the prover but not the cost model; a byte edit invalidates the block. (The
+A prose-only `summary` edit re-runs surprisal but not the prover; a `pre`/`post`/
+`modifies` edit re-runs the prover but not the cost model (a `regmap` edit re-runs both
+the prover and the L1 lints, since `regmap` keys them too); a byte edit invalidates the
+block. (The
 binding's `modified_at` is the cheap change *detector* that triggers re-keying; the
 content hashes decide what actually recomputes.)
 
@@ -269,10 +272,11 @@ The proposer sees, per block: the contract 4-tuple ⟨pre, post, modifies, regma
 (§2.1), the prose intent, predecessor/successor interfaces (so register conventions
 line up), the µarch cost of the current block from L1 (the number to beat), the
 project-priors rules file (§3.1), and 1–3 few-shot exemplars of (contract, accepted
-block) pairs from intent-map history. **The incumbent never conditions the proposer by
-default** — its quality is arbitrary, so it carries no information the contract
-shouldn't already carry; the program is prompted by intent, not by another program. It
-instead enters the tournament as **candidate zero**: scored, proved, and ranked
+block) pairs from evalgen's accepted-block corpus (§4.4). **The incumbent never conditions the proposer by
+default** — its *text* stays out of the prompt (its quality is arbitrary, and the
+program is prompted by intent, not by another program); only its measured L1 cost is
+passed, as the number to beat. It instead enters the tournament as **candidate zero**:
+scored, proved, and ranked
 identically to generated candidates (an engine happily evaluates a suggested move — it
 just enters as one line among the candidates, never as guidance to search). This makes
 acceptance monotone: the proposed winner is ≥ incumbent under the eval by construction.
@@ -384,8 +388,9 @@ sigil-based line grammar. evalgen adds no second store and no sidecar files.
 The engine is a modular C++ component, **libevalgen**, embedding its dependencies —
 libllama (the resident 7B; model load cost alone forces the resident design), Capstone
 (lints/dataflow), Triton's C++ API + Z3 C API (L2), SQLite (read-only intent-map
-connection + evalgen's own cache db). llvm-mca is the one subprocess (per-block
-invocations, results cached by block hash). Two thin frontends share the core:
+connection + evalgen's own cache db). nasm and llvm-mca are the two subprocesses (nasm
+assembles each block to bytes with the SConstruct flags; llvm-mca scores them — both
+per-block, results cached by block hash). Two thin frontends share the core:
 
 - **evalgend** — the resident daemon for the editor hot path. Internal job queue with
   a small worker pool; blocks currently visible in the editor (client-hinted) jump the
@@ -431,8 +436,10 @@ renders only severity — no information is destroyed to fit LSP, only down-rend
 
 ### 5.4 Triggers, target legs, and desync semantics
 
-Two artifacts change independently: asm files (watch on save, ~200 ms debounce) and the
-intent store (watch the db/WAL file mtime). Portable-stratum blocks yield one
+Three artifacts change independently: asm files (watch on save, ~200 ms debounce), the
+intent store (watch the db/WAL file mtime), and the project-priors rules file (§3.1),
+whose content hash folds into the L1 cache keys (§3.4) so a rules edit flushes exactly
+the L1 layers that condition on it. Portable-stratum blocks yield one
 (target, bytes) leg; blocks under `%ifdef WIN64` / seam bodies yield **one leg per
 target** (assembled with the same flags the SConstruct uses), each leg evaluated and
 cached independently under the same label — the report carries a `target` field.
@@ -497,8 +504,8 @@ shadow-space lint that behavioral tests provably cannot catch.*
 
 **E1 — Surprisal.** Link libllama into evalgend (resident Qwen2.5-Coder-7B, Q4/Q5);
 two-pass conditional scoring per §3.1 with `summary` as the conditioning string;
-threshold tuning against a small corpus of known-good and known-bad blocks from
-intent-map history. *Success: the detector flags a real intent-incongruent instruction
+threshold tuning against a small corpus of known-good and known-bad blocks harvested
+from the git history of the `.asm` files joined with the intent DB at each commit. *Success: the detector flags a real intent-incongruent instruction
 (conventional code contradicting its stated intent) without flagging ten
 justified-but-unusual ones.*
 
@@ -551,7 +558,7 @@ verb (§5.2); the observatory stays outside the artifact it observes.
    per-target obligation sets (§2.2).
 2. **Surprisal precision on asm.** Asm token distributions are thin even in code
    models. If E1 precision disappoints, a LoRA on (intent, block) pairs harvested from
-   intent-map history is the cheap sharpening path — and it bakes in project priors no
+   the corpus's git history joined with the intent DB is the cheap sharpening path — and it bakes in project priors no
    pretrained model has.
 3. **Semantics gaps.** Triton/angr instruction coverage vs. what real blocks use (esp.
    AVX-512 subsets). K semantics arbitration adds integration cost; may defer to "trust

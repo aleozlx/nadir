@@ -56,7 +56,8 @@ target's arg registers. The internal convention removed that limit; see §2.2.)
 
 ### 2.2 ABI stratum — one internal convention, translated at the seam
 Win64 and SysV differ in convention: arg registers, mandatory shadow space, the
-callee-saved set (SysV also saves RSI/RDI; Win64 also saves xmm6–15). nadir does **not**
+callee-saved set (Win64 also saves RSI/RDI and xmm6–15; SysV's set is the base
+`rbx/rbp/r12–r15` only — its `rsi/rdi` are the arg1/arg2 volatiles). nadir does **not**
 resolve roles dynamically, and it does not skin two conventions under `%define` roles —
 a macro layer makes the source *look* uniform while the collision graph, frame
 discipline, and callee-saved sets still diverge underneath (see
@@ -108,7 +109,7 @@ Irreducibly divergent: `WriteFile`+`kernel32` vs `write` syscall, PE vs ELF. Int
 names the *capability*; the flag picks a hand-written implementation:
 
 ```
-stdout-write → { win64: WriteFile-via-kernel32, linux: syscall-write }
+write → { win64: WriteFile-via-kernel32, linux: syscall-write }
 ```
 
 A lookup keyed by target, not a transform of it. The seam absorbs **both** kinds of
@@ -189,11 +190,14 @@ Manjaro / Steam Deck default to Wayland. **Wayland-from-asm** needs `wl_registry
 `wl_compositor`+`wl_shm`, `memfd_create`+`mmap`, xdg-shell handshake — ~5 protocol
 objects and an shm dance before one pixel. **XWayland is the free escape hatch:** ships
 on Manjaro-Wayland, and X11-protocol asm talks to it as if it were X11. Keeps
-`open-window` pure `socket`/`connect`/`write` — no shm, no `mmap`. *Der Umweg über
+`open-window` pure `socket`/`connect`/`read`/`write` — no shm, no `mmap`. *Der Umweg über
 XWayland ist der kürzere Weg.*
 
-Caveat: Steam Deck **gaming mode** (pure Gamescope) has no XWayland → X11 client won't
-connect. Fine for a dev toy (desktop mode has it); known edge.
+Caveat: Steam Deck **gaming mode** *does* run XWayland — it is how Proton titles render —
+but gamescope owns that nested server and presents one surface at a time, so a nadir X11
+client must be launched *inside* the gamescope session to reach it; an out-of-session
+process can't just attach. Desktop mode is the unconstrained dev path; the in-session
+launch plumbing is the known edge.
 
 ### 5.2 Where the wrapper stops — the primitive tier
 Wrap at the primitive tier (`open-window`/`blit`/`close`); keep the **event loop per-OS
@@ -383,7 +387,7 @@ exercises exactly the primitives the roadmap builds anyway. Self-hosting (M3c) i
 not aspirational — the first real program already closes the loop.
 
 **`nadir build` — second verb, thin orchestration.** Shells out to `nasm` + linker,
-owns the flag matrix (`-D WIN64` vs SysV, `/subsystem:windows` vs ELF entry), selects
+owns the flag matrix (`-D WIN64` vs SysV, `/subsystem:console` vs ELF entry), selects
 target rows. Adds one capability — `spawn` (`CreateProcessA` / `fork`+`execve`) — which
 nadir reaches inevitably once it drives anything, so it's a "when," not a cost. With
 `build` + `test` + the corpus beneath, all three are authored in the corpus: nadir
@@ -440,8 +444,10 @@ der Reiz.*
   (`"controls coolant flow"` vs query `thermal management`). A `sqlite-vec` sidecar
   closes it additively without touching the wire grammar — *after* the checker, not
   before.
-- **Steam Deck gaming-mode X gap.** No XWayland in pure Gamescope; document as a known
-  edge, not a bug.
+- **Steam Deck gaming-mode X gap.** Gaming mode *runs* XWayland (Proton renders through
+  it), but a nadir X11 client must launch inside the gamescope session and share its
+  single-surface presentation — an out-of-session process can't attach. Document the
+  in-session launch plumbing as a known edge, not a bug.
 
 ---
 

@@ -77,7 +77,7 @@ to writing a mini toolkit than calling Win32.
 
 Wayland is not the Linux equivalent of Win32. It is narrower:
 
-| Windows concept | Linux-side rough analog |
+| Linux-side layer | Windows-side rough analog / role |
 |---|---|
 | Linux syscalls | `kernel32`/`ntdll` territory |
 | Wayland/X11 protocol | part of the `user32`/DWM/window-manager boundary |
@@ -413,6 +413,6 @@ it.
 | Raw Wayland | low initially | Linux/BSD-ish | no toolkit | libc avoidable if raw protocol | later research row |
 | GTK | medium via C wrapper | mostly Linux-first | GNOME-native | libc expected | good native wrapper candidate |
 | Qt | low direct, medium via wrapper | strong | KDE/native-ish | libc expected on Linux | powerful, heavier license/API |
-| WPF/WinUI/Avalonia | low direct | varies | good | managed runtime | useful analogy, not nadir core |
+| WPF/WinUI/Avalonia | low direct | varies | good | managed (WPF/Avalonia); native C++/WinRT for WinUI 3 | useful analogy, not nadir core |
 | Dear ImGui | high via C wrapper | strong | custom tool UI | backend-dependent | best first tool layer |
 
