@@ -22,7 +22,7 @@ evalgen is the machine that walks the arithmetic. **villen becomes the first
 downstream consumer**, taking nadir (and with it evalgen) as a dependency; the Deck
 survives below as reference deployment, not owner.
 
-Placement: the **tooling stratum** (DESIGN §8), not a §4 capability — the capability
+Placement: the **tooling stratum** (DESIGN §8), not a DESIGN §4 capability — the capability
 table is the thin waist, and evalgen never widens it. Structurally it is the
 mechanization of the reconcile loop (DESIGN §6.1): L1 mechanizes the brushing, L2
 falsification, the generator proposal, while acceptance stays a human act. The engine
@@ -348,7 +348,7 @@ carries forward from nadir: *klein aber mein*. Cloud calls (frontier drafting/ju
 escalation proposer) are optional, explicit, and never on the hot path.
 
 **Optionality is a hard requirement:** the nadir corpus must remain buildable and
-testable with scons + nasm + pytest alone (DESIGN §8). evalgen deepens confidence; it
+testable with scons + nasm + pytest alone (DESIGN §9). evalgen deepens confidence; it
 must never become a build dependency.
 
 ### 5.1 intent-map interface
@@ -542,7 +542,7 @@ recorded, lint-only); additional ISAs (ARM/RISC-V have official Sail semantics a
 natural second targets once x86 validates the architecture); self-installation of
 generated code; any network requirement in the core loop.
 
-And, per placement (§0): evalgen is **not** a §4 capability and never enters the
+And, per placement (§0): evalgen is **not** a DESIGN §4 capability and never enters the
 capability table; it is **not** a build or test dependency of the corpus — behavioral
 tests (DESIGN §6.2) remain the cross-target ground truth with or without it; and the
 *engine* is **not** self-hosted — corpus authorship stops at the thin `nadir eval`
