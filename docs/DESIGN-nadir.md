@@ -56,7 +56,8 @@ target's arg registers. The internal convention removed that limit; see §2.2.)
 
 ### 2.2 ABI stratum — one internal convention, translated at the seam
 Win64 and SysV differ in convention: arg registers, mandatory shadow space, the
-callee-saved set (SysV also saves RSI/RDI; Win64 also saves xmm6–15). nadir does **not**
+callee-saved set (Win64 also saves RSI/RDI and xmm6–15; SysV's set is the base
+`rbx/rbp/r12–r15` only — its `rsi/rdi` are the arg1/arg2 volatiles). nadir does **not**
 resolve roles dynamically, and it does not skin two conventions under `%define` roles —
 a macro layer makes the source *look* uniform while the collision graph, frame
 discipline, and callee-saved sets still diverge underneath (see
@@ -88,10 +89,10 @@ the internal convention itself.
 
 | concept key | win64 detail | sysv detail | nadir |
 |---|---|---|---|
-| `arg1` | `rcx` | `rdi` | `rdi` |
-| `arg2` | `rdx` | `rsi` | `rsi` |
-| `shadow-space` | `sub rsp, 32` before any call | *(none)* | inside `cap_*` win64 only |
-| `callee-saved+` | `rsi, rdi, xmm6–15` | *(base only)* | *(base only)* |
+| `abi:arg1` | `rcx` | `rdi` | `rdi` |
+| `abi:arg2` | `rdx` | `rsi` | `rsi` |
+| `abi:shadow-space` | `sub rsp, 32` before any call | *(none)* | inside `cap_*` win64 only |
+| `abi:callee-saved` | +`rsi, rdi, xmm6–15` | *(base only)* | *(base only)* |
 
 **Shared concept keys, per-target detail** — truer to intent-map's key↔concept model
 than splitting `f_win64:arg1` / `f_sysv:arg1`. The key *is* the logical argument; the
@@ -108,7 +109,7 @@ Irreducibly divergent: `WriteFile`+`kernel32` vs `write` syscall, PE vs ELF. Int
 names the *capability*; the flag picks a hand-written implementation:
 
 ```
-stdout-write → { win64: WriteFile-via-kernel32, linux: syscall-write }
+write → { win64: WriteFile-via-kernel32, linux: syscall-write }
 ```
 
 A lookup keyed by target, not a transform of it. The seam absorbs **both** kinds of
@@ -151,6 +152,11 @@ eyeballing.
 | `spawn` | on-demand (self-host) | `CreateProcessA` | `fork`+`execve` (`syscall 57`/`59`) |
 | `open-window` | GUI leaf | `user32` sequence | X11 bytes over socket |
 
+Only `open-window` is table content until M2; its GUI-primitive companions `blit` and
+`close-window` are enumerated in [DESIGN-nadir-gui.md](DESIGN-nadir-gui.md) §4.1 and
+join the table when M2 pulls them (the window `close-window` is distinct from the
+file-descriptor `close` above).
+
 **2 mandatory, rest on-demand.** `exit`+`write` alone is a complete demonstrable program
 on both OSes: a self-contained kernel that prints a result.
 
@@ -177,7 +183,7 @@ lookup-table in its purest form.
 
 GUI splits into two tracks (full treatment in
 [DESIGN-nadir-gui.md](DESIGN-nadir-gui.md)): the **primitive track** — this section:
-`open-window`/`blit`/`close` as capabilities, the honest seam proof, M2 — and a
+`open-window`/`blit`/`close-window` as capabilities, the honest seam proof, M2 — and a
 **host-tool track** (`nadir_ig`, nadir's Dear ImGui binding: Dear ImGui behind a
 narrow C ABI) for assembly
 workbenches. The tool track lives *outside* the freestanding waist — it may link libc
@@ -189,14 +195,17 @@ Manjaro / Steam Deck default to Wayland. **Wayland-from-asm** needs `wl_registry
 `wl_compositor`+`wl_shm`, `memfd_create`+`mmap`, xdg-shell handshake — ~5 protocol
 objects and an shm dance before one pixel. **XWayland is the free escape hatch:** ships
 on Manjaro-Wayland, and X11-protocol asm talks to it as if it were X11. Keeps
-`open-window` pure `socket`/`connect`/`write` — no shm, no `mmap`. *Der Umweg über
+`open-window` pure `socket`/`connect`/`read`/`write` — no shm, no `mmap`. *Der Umweg über
 XWayland ist der kürzere Weg.*
 
-Caveat: Steam Deck **gaming mode** (pure Gamescope) has no XWayland → X11 client won't
-connect. Fine for a dev toy (desktop mode has it); known edge.
+Caveat: Steam Deck **gaming mode** *does* run XWayland — it is how Proton titles render —
+but gamescope owns that nested server and presents one surface at a time, so a nadir X11
+client must be launched *inside* the gamescope session to reach it; an out-of-session
+process can't just attach. Desktop mode is the unconstrained dev path; the in-session
+launch plumbing is the known edge.
 
 ### 5.2 Where the wrapper stops — the primitive tier
-Wrap at the primitive tier (`open-window`/`blit`/`close`); keep the **event loop per-OS
+Wrap at the primitive tier (`open-window`/`blit`/`close-window`); keep the **event loop per-OS
 and explicit**. Note the convention boundary this creates: anything the OS calls *into*
 (Win32's `WndProc` is the first) arrives in the *target's* convention and must shim
 into the nadir convention (§2.2) before touching portable code — the same duty `_start`
@@ -228,8 +237,9 @@ agent-swarm authoring. The tiers below mechanize the parts that can be.
 - **Behavioral tests** at capability/function boundaries — the bulk. *Same test, both
   ABIs*: run against win64 and linux binaries, assert identical observable behavior.
   This is where the two hand-written realizations get pinned to one contract — the flag
-  swaps implementation, the test proves they didn't diverge in meaning. *Ein Test, zwei Backends.* Slots onto the existing `test_zero_runner.py`/pytest harness; only delta is
-  loading PE vs ELF.
+  swaps implementation, the test proves they didn't diverge in meaning. *Ein Test, zwei
+  Backends.* Slots onto the existing `tests/test_m0.py`/`test_m1.py` pytest harness; only
+  delta is loading PE vs ELF.
 - **Promoted-label tests** — critical invariants deliberately refactored to sit at a
   call boundary (own prologue/epilogue, ABI-clean) so they're callable in isolation.
   Testability pressure doubles as a decomposition heuristic: labels worth testing get
@@ -323,6 +333,10 @@ consumed by villen; tooling stratum, not a §4 capability — the waist doesn't 
 The engine is modular C++ behind a corpus-authored verb (`nadir eval`, §8) — the same
 seam nasm occupies behind `nadir build`.
 
+---
+
+## 7. Roadmap
+
 1. **M0 — prove the seam.** `exit`+`write` at capability level; two hand-written rows
    (`linux: syscall` / `win64: kernel32`), flag-selected. A compute kernel printing a
    result on Manjaro/Deck and Windows. Round-trips the reconcile loop → freestanding
@@ -338,11 +352,14 @@ seam nasm occupies behind `nadir build`.
    `MapWindow` via XWayland) under one intent. Locates where portability should stop.
    *(The host-tool GUI track G0–G5 in [DESIGN-nadir-gui.md](DESIGN-nadir-gui.md) runs
    parallel to this roadmap and gates nothing here.)*
-4. **M3a — behavioral tests.** Same test, both ABIs, on the existing
-   `test_zero_runner.py`/pytest harness; only delta is loading PE vs ELF. Gates on
-   nothing heavier — do this before building any injector.
-5. **M3b — injection + instrumentation.** Sentinel convention on promoted labels; the
-   injector + global-predicate guard; thin lint for shadow-space / callee-saved. The
+4. **M3a — behavioral tests.** Same test, both ABIs — *landed with M0/M1* as
+   `tests/test_m0.py` + `test_m1.py`, each leg gated in its own CI workflow. What
+   remains is folding the two into a single parametrized cross-target runner (the one
+   delta being loading PE vs ELF); gates on nothing heavier than the existing pytest
+   harness, so this precedes any injector.
+5. **M3b — injection + instrumentation.** The `@ret`/`@end` sentinel convention is
+   already placed on promoted labels (§6.4); this milestone adds the injector +
+   global-predicate guard over them; thin lint for shadow-space / callee-saved. The
    real lift, deferred until M3a proves the harness. **The injector is itself a nadir
    program** — search-replace over asm text (`read` file → scan for `@ret`/`@end` →
    `write` spliced output), needing only `read`/`write`/`open`/`exit`, all already on the
@@ -356,8 +373,9 @@ seam nasm occupies behind `nadir build`.
 8. **E-track — evalgen (horizon, own numbering).** The evaluation & generation engine
    runs as its own milestone track (E0–E5, [DESIGN-evalgen.md](DESIGN-evalgen.md) §6)
    so it never blocks or renumbers M-milestones. E0 (cost gutter + dataflow lints) is
-   independently useful and can land at any point; the prover legs (E2–E3) give the
-   Win64 in-seam invariants their first mechanical check. Behavioral tests (§6.2)
+   independently useful and can land at any point; E0's dataflow lints give the Win64
+   in-seam invariants their first mechanical check, and the prover legs (E2–E3) upgrade
+   them to per-block proof obligations. Behavioral tests (§6.2)
    remain the cross-target ground truth throughout.
 
 ---
@@ -383,7 +401,7 @@ exercises exactly the primitives the roadmap builds anyway. Self-hosting (M3c) i
 not aspirational — the first real program already closes the loop.
 
 **`nadir build` — second verb, thin orchestration.** Shells out to `nasm` + linker,
-owns the flag matrix (`-D WIN64` vs SysV, `/subsystem:windows` vs ELF entry), selects
+owns the flag matrix (`-D WIN64` vs SysV, `/subsystem:console` vs ELF entry), selects
 target rows. Adds one capability — `spawn` (`CreateProcessA` / `fork`+`execve`) — which
 nadir reaches inevitably once it drives anything, so it's a "when," not a cost. With
 `build` + `test` + the corpus beneath, all three are authored in the corpus: nadir
@@ -419,8 +437,8 @@ der Reiz.*
   "done" for its corpus? Trending toward "never" means the waist is leaking toward libc.
 - **Closed-vocabulary discipline.** Roles/capabilities stay a typed enum the tooling
   exhaustively handles; free-text at the ABI/OS strata kills mechanical coherence.
-- **Injection anchor hardening.** Sentinel comments (`@end`/`@ret`) resolve the textual-
-  match fragility for now. Structural anchoring only if the corpus ever outgrows the
+- **Injection anchor hardening.** Sentinel comments (`@end`/`@ret`) resolve the
+  textual-match fragility for now. Structural anchoring only if the corpus ever outgrows the
   convention — pull-based. *Erst wenn's kracht, wird gehärtet.*
 - **Shim ABI discipline.** The injected shim must be *more* ABI-disciplined than the code
   under test — a shim that clobbers a callee-saved reg masks or invents bugs. One
@@ -440,8 +458,10 @@ der Reiz.*
   (`"controls coolant flow"` vs query `thermal management`). A `sqlite-vec` sidecar
   closes it additively without touching the wire grammar — *after* the checker, not
   before.
-- **Steam Deck gaming-mode X gap.** No XWayland in pure Gamescope; document as a known
-  edge, not a bug.
+- **Steam Deck gaming-mode X gap.** Gaming mode *runs* XWayland (Proton renders through
+  it), but a nadir X11 client must launch inside the gamescope session and share its
+  single-surface presentation — an out-of-session process can't attach. Document the
+  in-session launch plumbing as a known edge, not a bug.
 
 ---
 

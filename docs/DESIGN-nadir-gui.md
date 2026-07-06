@@ -77,7 +77,7 @@ to writing a mini toolkit than calling Win32.
 
 Wayland is not the Linux equivalent of Win32. It is narrower:
 
-| Windows concept | Linux-side rough analog |
+| Linux-side layer | Windows-side rough analog / role |
 |---|---|
 | Linux syscalls | `kernel32`/`ntdll` territory |
 | Wayland/X11 protocol | part of the `user32`/DWM/window-manager boundary |
@@ -170,10 +170,10 @@ void nadir_ig_shutdown(void);
 
 void nadir_ig_text(const char *text);
 int  nadir_ig_button(const char *label);
-void nadir_ig_same_line(void);
-int  nadir_ig_input_text(const char *label, char *buf, int buf_size);
-int  nadir_ig_slider_i32(const char *label, int *value, int min, int max);
 ```
+
+(This is the six-function spike §10's G0 builds; the interaction primitives below —
+`same_line`, `input_text`, `slider_i32` — arrive with the G2 workbench surface.)
 
 G2 surface:
 
@@ -181,6 +181,9 @@ G2 surface:
 int  nadir_ig_window_begin(const char *title, int *open);
 void nadir_ig_window_end(void);
 void nadir_ig_separator(void);
+void nadir_ig_same_line(void);
+int  nadir_ig_input_text(const char *label, char *buf, int buf_size);
+int  nadir_ig_slider_i32(const char *label, int *value, int min, int max);
 void nadir_ig_hex_u64(const char *label, unsigned long long value);
 void nadir_ig_table_registers(const unsigned long long *regs, int count);
 void nadir_ig_memory_view(const void *base, unsigned long long addr, int len);
@@ -229,7 +232,7 @@ nadir-convention code, and should say so.
 
 ## 6. Event model
 
-Do not force a synthetic retained event system in M0.
+Do not force a synthetic retained event system in G0.
 
 Dear ImGui already provides the right inversion:
 
@@ -332,7 +335,7 @@ needs OS-native dialogs, accessibility, or GNOME integration.
 
 ### 8.3 Raw Wayland
 
-Raw Wayland is a research/backend row, not M0:
+Raw Wayland is a research/backend row, not G0/G1:
 
 ```
 syscalls -> Wayland socket -> wl_registry -> wl_compositor -> wl_shm
@@ -391,7 +394,7 @@ it.
 - **Wrapper creep.** Exporting too much Dear ImGui recreates a large toolkit ABI. Keep the
   C surface tool-shaped and pull-based.
 - **Backend lock-in.** D3D11/SDL/OpenGL are implementation rows, not concepts. The asm
-  ABI must not leak backend handles in M0.
+  ABI must not leak backend handles in G0.
 - **Native integration gap.** Dear ImGui is excellent for tools, weak for native desktop
   app conventions. That is acceptable for nadir's first GUI target.
 - **Accessibility gap.** Custom-rendered UI is less accessible than native widgets. If
@@ -413,6 +416,6 @@ it.
 | Raw Wayland | low initially | Linux/BSD-ish | no toolkit | libc avoidable if raw protocol | later research row |
 | GTK | medium via C wrapper | mostly Linux-first | GNOME-native | libc expected | good native wrapper candidate |
 | Qt | low direct, medium via wrapper | strong | KDE/native-ish | libc expected on Linux | powerful, heavier license/API |
-| WPF/WinUI/Avalonia | low direct | varies | good | managed runtime | useful analogy, not nadir core |
+| WPF/WinUI/Avalonia | low direct | varies | good | managed (WPF/Avalonia); native C++/WinRT for WinUI 3 | useful analogy, not nadir core |
 | Dear ImGui | high via C wrapper | strong | custom tool UI | backend-dependent | best first tool layer |
 
